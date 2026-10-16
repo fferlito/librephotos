@@ -17,6 +17,7 @@ import { useSettingsStore } from "@/stores/settings";
 import { useSyncStore } from "@/stores/sync";
 import { getBackupConfig } from "@/db/queries/backup";
 import {
+  isSyncing,
   repairSync,
   syncAll,
   syncBackupOnly,
@@ -212,13 +213,29 @@ export function backupQueueSummary(db: AppDatabase) {
 /**
  * Subscribe to camera-roll changes; a change nudges a foreground sync while the
  * app is open (doc 03 §4). Returns an unsubscribe handle. App-only.
+ *
+ * A change that lands while a sync is running is not folded into that run: its
+ * camera-roll scan may already be done, and a run with uploads takes minutes, so
+ * a new photo waited for the next trigger. It waits for the run and scans again.
  */
 export function registerDeviceMediaListener(
   db: AppDatabase,
   getUserId: () => number | null
 ): () => void {
+  let rescanQueued = false;
+  const sync = () => runSync(db, { userId: getUserId(), reason: "foreground" });
   const sub = getMediaProvider().addChangeListener(() => {
-    void runSync(db, { userId: getUserId(), reason: "foreground" });
+    if (!isSyncing()) {
+      void sync();
+      return;
+    }
+    if (rescanQueued) return;
+    rescanQueued = true;
+    // runSync joins the run in flight; once it settles, scan again.
+    void sync().finally(() => {
+      rescanQueued = false;
+      void sync();
+    });
   });
   return () => sub.remove();
 }
