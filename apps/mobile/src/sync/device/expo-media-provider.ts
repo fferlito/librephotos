@@ -5,6 +5,7 @@
  * the pure device-sync module or the Node tests.
  */
 import * as MediaLibrary from "expo-media-library/legacy";
+import { AppState, PermissionsAndroid, Platform } from "react-native";
 import type {
   LocalMediaType,
   MediaAlbum,
@@ -38,13 +39,37 @@ function mapPermission(p: MediaLibrary.PermissionResponse): MediaPermission {
   return { granted: p.granted, canAskAgain: p.canAskAgain, accessPrivileges: access };
 }
 
+/**
+ * Ask for ACCESS_MEDIA_LOCATION on Android 10+, where reading a photo without it
+ * hands the app a copy with the GPS position removed, so backed-up photos lost
+ * their location. expo-media-library adds it to its own request, but its check
+ * answers "granted" without it (on Android 14+ the selected-photos permission
+ * that comes with full access counts as granted), so its request never runs.
+ * Only asked while the app is in the foreground: a request needs an activity.
+ */
+async function ensureMediaLocation(): Promise<void> {
+  if (Platform.OS !== "android" || Number(Platform.Version) < 29) return;
+  if (AppState.currentState !== "active") return;
+  const permission = PermissionsAndroid.PERMISSIONS.ACCESS_MEDIA_LOCATION;
+  try {
+    if (await PermissionsAndroid.check(permission)) return;
+    await PermissionsAndroid.request(permission);
+  } catch {
+    // No activity to ask from; the next foreground scan asks again.
+  }
+}
+
 export function createExpoMediaProvider(): MediaProvider {
   return {
     async getPermissions() {
-      return mapPermission(await MediaLibrary.getPermissionsAsync());
+      const permission = mapPermission(await MediaLibrary.getPermissionsAsync());
+      if (permission.granted) await ensureMediaLocation();
+      return permission;
     },
     async requestPermissions() {
-      return mapPermission(await MediaLibrary.requestPermissionsAsync());
+      const permission = mapPermission(await MediaLibrary.requestPermissionsAsync());
+      if (permission.granted) await ensureMediaLocation();
+      return permission;
     },
     async getAlbums() {
       // `includeSmartAlbums` is deliberately OFF. iOS returns ~20 overlapping
