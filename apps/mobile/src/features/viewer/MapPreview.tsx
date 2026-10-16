@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Linking, Platform, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
+import Constants from "expo-constants";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/components/Icon";
 import { useTheme } from "@/theme";
@@ -27,6 +28,20 @@ const TILE_SIZE = 256;
 /** OSM's raster tiles stop here; asking beyond it returns 404s. */
 const MAX_ZOOM = 19;
 export const DEFAULT_ZOOM = 14;
+
+/**
+ * OSM's tile usage policy requires a User-Agent that identifies the app; the
+ * HTTP library's default one is blocked and answered with an "Access blocked"
+ * image instead of the tile.
+ */
+const TILE_HEADERS = {
+  "User-Agent": `${Constants.expoConfig?.name ?? "LibrePhotos"}/${Constants.expoConfig?.version ?? "1.0"} (LibrePhotos mobile; +https://github.com/LibrePhotos/librephotos)`,
+};
+/**
+ * Part of the disk-cache key: tiles cached before the User-Agent was sent are
+ * the "Access blocked" image, so they must not be served again.
+ */
+const TILE_CACHE_VERSION = "ua1";
 
 export type TilePlacement = { x: number; y: number; z: number; left: number; top: number };
 export type TileLayout = { tiles: TilePlacement[]; size: number };
@@ -167,7 +182,11 @@ export function MapPreview({
         <Image
           key={`${tile.z}/${tile.x}/${tile.y}`}
           testID={`${testID ?? "map"}-tile-${tile.x}-${tile.y}`}
-          source={{ uri: tileUrl(tile) }}
+          source={{
+            uri: tileUrl(tile),
+            headers: TILE_HEADERS,
+            cacheKey: `osm-${TILE_CACHE_VERSION}/${tile.z}/${tile.x}/${tile.y}`,
+          }}
           style={{
             position: "absolute",
             left: tile.left,
