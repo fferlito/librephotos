@@ -17,7 +17,7 @@
  * the proxy. Resuming a half-sent file across runs is still a Phase 4
  * enhancement (see handoff); a failed run starts the file again.
  */
-import { File, Paths, type FileHandle } from "expo-file-system";
+import { File, FileMode, Paths, type FileHandle } from "expo-file-system";
 import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library/legacy";
 import { isRecord, parseJson } from "@/lib/guards";
@@ -136,7 +136,9 @@ export function createExpoUploadTransport(deps: TransportDeps): UploadTransport 
       // larger body. A file that fits goes up straight from disk; a larger one
       // is cut into temporary chunk files, one per request.
       const ranges = chunkRanges(size);
-      const source = ranges.length > 1 ? new File(uri).open() : null;
+      // Read-only: without a mode a file:// path opens read-write, and the app
+      // may not write to a photo in the camera folder, so open() would throw.
+      const source = ranges.length > 1 ? new File(uri).open(FileMode.ReadOnly) : null;
       let uploadId = "";
       let sent = 0;
       try {
