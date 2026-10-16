@@ -3,6 +3,8 @@ import { Image } from "expo-image";
 import { squareThumbnailUrl } from "@librephotos/api-client";
 import { useDb } from "@/db/provider";
 import { getThumb } from "@/sync/thumbs";
+import { Icon } from "@/components/Icon";
+import { useTheme } from "@/theme";
 
 /** Normalized grid item — the shape every mirror query maps onto for display. */
 export type GridItem = {
@@ -39,6 +41,7 @@ export function PhotoTile({
   selected?: boolean;
 }) {
   const db = useDb();
+  const theme = useTheme();
   const uri = resolveUri(db, item, serverAddress);
   return (
     <Pressable
@@ -59,8 +62,20 @@ export function PhotoTile({
       {item.type === "video" ? (
         <View
           testID={`video-badge-${item.key}`}
-          style={{ position: "absolute", right: 4, bottom: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: "#fff" }}
-        />
+          style={{
+            position: "absolute",
+            right: 4,
+            bottom: 4,
+            width: 20,
+            height: 20,
+            borderRadius: 10,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon name="play" size={12} color="#ffffff" />
+        </View>
       ) : null}
       {/* Local-only asset (no remote counterpart yet): pending-upload badge.
           Flips off once the uploaded/exists-matched server row arrives on the
@@ -95,7 +110,7 @@ export function PhotoTile({
             borderRadius: 10,
             borderWidth: 2,
             borderColor: "#fff",
-            backgroundColor: selected ? "#208AEF" : "rgba(0,0,0,0.25)",
+            backgroundColor: selected ? theme.brand : "rgba(0,0,0,0.25)",
             alignItems: "center",
             justifyContent: "center",
           }}

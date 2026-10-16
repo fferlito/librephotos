@@ -401,6 +401,21 @@ describe("PhotoViewerScreen", () => {
     });
 
     /**
+     * Device-run report: a screen recording still on the phone opened as a
+     * still frame that could not be played, because only server-only videos
+     * got the player.
+     */
+    it("plays a video that is on the phone from its own file", () => {
+      insertLocalAsset(t.db, { id: "LV", hash: null, type: "video", uri: "file:///clip.mp4" });
+      insertLocalAlbum(t.db, { id: "cam", backupSelection: 1, assetIds: ["LV"] });
+      globalThis.__mockSearchParams = { id: "LV" };
+
+      const utils = renderWithDb(<PhotoViewerScreen />, t.db);
+      expect(utils.getByTestId(/^viewer-video-/)).toBeTruthy();
+      expect(utils.queryByTestId(/^viewer-image-.*LV/)).toBeNull();
+    });
+
+    /**
      * The big thumbnail of a GIF is one frame. Animating it means the originals
      * endpoint — but only for the slide being looked at, since originals are
      * full-size files and the pager window holds hundreds.

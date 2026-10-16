@@ -27,6 +27,8 @@ export function VideoSlide({
   height,
   active,
   onTap,
+  insetTop = 0,
+  insetBottom = 0,
   testID,
 }: {
   uri: string;
@@ -36,6 +38,9 @@ export function VideoSlide({
   height: number;
   active: boolean;
   onTap?: () => void;
+  /** Space the viewer's own bars cover at the top and bottom of the screen. */
+  insetTop?: number;
+  insetBottom?: number;
   testID?: string;
 }) {
   if (!active) {
@@ -57,7 +62,8 @@ export function VideoSlide({
       headers={headers}
       width={width}
       height={height}
-      onTap={onTap}
+      insetTop={insetTop}
+      insetBottom={insetBottom}
     />
   );
 }
@@ -121,19 +127,27 @@ function VideoPoster({
   );
 }
 
+/**
+ * The playing video. The player draws its own controls and progress bar at the
+ * bottom of the view, so the view stops above the viewer's bars instead of
+ * running under them, and no tap handler wraps it: taps belong to the player's
+ * controls.
+ */
 function ActiveVideo({
   uri,
   headers,
   width,
   height,
-  onTap,
+  insetTop,
+  insetBottom,
   testID,
 }: {
   uri: string;
   headers: Record<string, string>;
   width: number;
   height: number;
-  onTap?: () => void;
+  insetTop: number;
+  insetBottom: number;
   testID?: string;
 }) {
   const player = useVideoPlayer({ uri, headers }, (instance) => {
@@ -144,19 +158,16 @@ function ActiveVideo({
   });
 
   return (
-    <Pressable
-      onPress={onTap}
-      style={{ width, height, alignItems: "center", justifyContent: "center" }}
-    >
+    <View style={{ width, height, paddingTop: insetTop, paddingBottom: insetBottom }}>
       <VideoView
         testID={testID}
         player={player}
-        style={{ width, height }}
+        style={{ width, flex: 1 }}
         contentFit="contain"
         nativeControls
         fullscreenOptions={{ enable: true }}
         allowsPictureInPicture={false}
       />
-    </Pressable>
+    </View>
   );
 }

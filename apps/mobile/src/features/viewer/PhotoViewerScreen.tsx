@@ -333,17 +333,26 @@ export function PhotoViewerScreen() {
       const active = item.key === current?.key;
       const toggleChrome = () => setChromeVisible((v) => !v);
 
-      if (item.type === "video" && item.image_hash && !item.local_uri) {
+      // A video still on the phone plays from its own file; one only on the
+      // server streams. Either way it needs the player: the image path would
+      // show a still frame that cannot be played.
+      if (item.type === "video" && (item.local_uri || item.image_hash)) {
         return (
           <VideoSlide
-            testID={`viewer-video-${item.image_hash}`}
-            uri={videoUrl(base, item.image_hash)}
-            posterUri={bigThumbnailUrl(base, item.image_hash)}
+            testID={`viewer-video-${item.image_hash ?? item.key}`}
+            uri={item.local_uri ?? videoUrl(base, item.image_hash ?? "")}
+            posterUri={item.image_hash ? bigThumbnailUrl(base, item.image_hash) : item.local_uri}
             headers={headers}
             width={width}
             height={height}
             active={active}
             onTap={toggleChrome}
+            insetTop={chromeVisible ? insets.top + TOP_BAR_HEIGHT : insets.top}
+            insetBottom={
+              chromeVisible && !sheetOpen
+                ? (flags ? actionBarHeight : insets.bottom) + THUMBNAIL_STRIP_HEIGHT
+                : insets.bottom
+            }
           />
         );
       }
@@ -375,7 +384,21 @@ export function PhotoViewerScreen() {
         />
       );
     },
-    [current?.key, base, headers, width, height, highlightedFace, detail.detail]
+    [
+      current?.key,
+      base,
+      headers,
+      width,
+      height,
+      highlightedFace,
+      detail.detail,
+      chromeVisible,
+      sheetOpen,
+      flags,
+      actionBarHeight,
+      insets.top,
+      insets.bottom,
+    ]
   );
 
   return (
@@ -527,6 +550,11 @@ function isAnimated(paths: readonly string[] | undefined): boolean {
  * active slide, because originals are full-size files and a pager window holds
  * hundreds of them.
  */
+/** Height of the top bar below the status bar (ViewerTopBar). */
+const TOP_BAR_HEIGHT = 56;
+/** Height of the thumbnail strip: 52 px thumbnails plus 8 px padding above and below. */
+const THUMBNAIL_STRIP_HEIGHT = 68;
+
 function sourceFor(
   slide: ViewerSlide,
   base: string,
