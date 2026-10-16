@@ -33,11 +33,21 @@ export type AutoAlbumRow = {
 
 const TILE_COLS = sql`rp.id, rp.image_hash, rp.timestamp, rp.added_on, rp.type, rp.aspect_ratio, rp.is_favorite, rp.dominant_color, rp.bucket_day`;
 
-/** All user albums, favorites first then most-recent. */
+/**
+ * All user albums, favorites first then most-recent. `cover_hash` is the cover
+ * the owner picked, else the album's first photo: the server sends only a picked
+ * cover, so an album without one showed an empty card.
+ */
 export function userAlbums(db: AppDatabase): UserAlbumRow[] {
   return db.all(
-    sql`SELECT id, title, owner_id, shared, favorited, cover_hash, photo_count, created_on, last_modified
-        FROM user_album ORDER BY favorited DESC, created_on DESC, title ASC`
+    sql`SELECT ua.id, ua.title, ua.owner_id, ua.shared, ua.favorited,
+               COALESCE(ua.cover_hash, (
+                 SELECT rp.image_hash FROM user_album_photo uap JOIN remote_photo rp ON rp.id = uap.photo_id
+                 WHERE uap.album_id = ua.id AND rp.in_trashcan = 0 AND rp.hidden = 0
+                 ORDER BY uap.ordering ASC, rp.timestamp DESC LIMIT 1
+               )) AS cover_hash,
+               ua.photo_count, ua.created_on, ua.last_modified
+        FROM user_album ua ORDER BY ua.favorited DESC, ua.created_on DESC, ua.title ASC`
   ) as UserAlbumRow[];
 }
 

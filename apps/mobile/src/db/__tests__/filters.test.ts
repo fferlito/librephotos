@@ -83,6 +83,27 @@ describe("album + people queries", () => {
     expect(userAlbumPhotos(t.db, 1).map((p) => p.id)).toEqual(["p1", "p2"]);
   });
 
+  it("falls back to the album's first photo when no cover was picked", () => {
+    // The server sends only a picked cover; without one the card was empty.
+    upsertUserAlbums(t.db, [
+      {
+        id: 2,
+        title: "Mead",
+        ownerId: 1,
+        shared: false,
+        favorited: false,
+        coverHash: null,
+        photoCount: 2,
+        createdOn: D(2024, 1, 1),
+        lastModified: D(2024, 1, 1),
+        photoIds: ["p2", "p1"],
+      },
+    ]);
+    const [album] = userAlbums(t.db);
+    expect(album.cover_hash).toBe(userAlbumPhotos(t.db, 2)[0].image_hash);
+    expect(album.cover_hash).not.toBeNull();
+  });
+
   it("returns auto albums newest-first", () => {
     upsertAutoAlbums(t.db, [
       { id: 1, title: "Old", timestamp: D(2020, 1, 1), favorited: false, photoCount: 1, coverHash: null, lastModified: 0 },
