@@ -4,7 +4,7 @@
  * expo-notifications' local scheduling — F-Droid-compatible, no FCM. The
  * enable/time preference lives in app_meta (db/queries/memories).
  */
-import * as Notifications from "expo-notifications";
+import { loadNotifications } from "./notifications-module";
 
 /** Stable identifier so re-scheduling replaces (not duplicates) the reminder. */
 export const MEMORIES_NOTIFICATION_ID = "memories-daily";
@@ -15,7 +15,8 @@ export const MEMORIES_DEEP_LINK = "/memories";
 /** Cancel any scheduled memories reminder. */
 export async function cancelMemoriesReminder(): Promise<void> {
   try {
-    await Notifications.cancelScheduledNotificationAsync(MEMORIES_NOTIFICATION_ID);
+    const Notifications = await loadNotifications();
+    await Notifications?.cancelScheduledNotificationAsync(MEMORIES_NOTIFICATION_ID);
   } catch {
     // no scheduled notification / no native module — safe to ignore
   }
@@ -23,14 +24,17 @@ export async function cancelMemoriesReminder(): Promise<void> {
 
 /**
  * Schedule (or reschedule) the daily reminder at the given local time. Requests
- * permission first; returns false if permission was denied. i18n strings are
- * passed in so this module stays UI-agnostic.
+ * permission first; returns false if permission was denied or notifications
+ * are unavailable (Expo Go on Android). i18n strings are passed in so this
+ * module stays UI-agnostic.
  */
 export async function scheduleMemoriesReminder(
   hour: number,
   minute: number,
   content: { title: string; body: string }
 ): Promise<boolean> {
+  const Notifications = await loadNotifications();
+  if (!Notifications) return false;
   const perms = await Notifications.getPermissionsAsync();
   let granted = perms.granted;
   if (!granted) {

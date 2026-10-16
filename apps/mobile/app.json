@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "LibrePhotos",
+    "name": "DropjeBox",
     "slug": "librephotos-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/AppIcons/appstore.png",
     "scheme": "librephotos",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -14,10 +14,8 @@
     "android": {
       "package": "com.librephotosmobile",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#FDD79E",
+        "foregroundImage": "./assets/AppIcons/android/adaptive-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
       "intentFilters": [
@@ -74,7 +72,15 @@
           "color": "#208AEF"
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

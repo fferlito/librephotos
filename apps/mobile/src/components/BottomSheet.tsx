@@ -51,12 +51,16 @@ export function sheetGeometry(windowHeight: number): SheetGeometry {
  * Which detent a drag should land on: the nearest one to where the sheet is,
  * except that a fast flick carries it one detent further in the flick's
  * direction. Velocity is px/s (what the pan gesture reports).
+ *
+ * A worklet because the pan's `onEnd` calls it on the UI runtime; calling a
+ * plain JS function there crashes release builds.
  */
 export function snapTarget(
   geometry: SheetGeometry,
   translateY: number,
   velocityY: number
 ): SheetDetent {
+  "worklet";
   const nearest = DETENT_ORDER.reduce((best, detent) =>
     Math.abs(geometry.offsets[detent] - translateY) < Math.abs(geometry.offsets[best] - translateY)
       ? detent
