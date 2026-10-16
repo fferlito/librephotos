@@ -97,9 +97,80 @@ from this list if so.
   - `apps/mobile/src/sync/upload/__tests__/queue.test.ts`
   - `apps/mobile/src/sync/upload/__tests__/status.test.ts`
 
+### 6. A video on the phone opens as a still photo and cannot play
+
+- **App:** mobile
+- **Symptom:** a video that is still on the phone (for example a screen recording) opens in the
+  viewer as a still frame with no way to play it. In the grid the only sign of a video is a tiny
+  white dot. Once it played, the video's controls and progress bar were hidden under the viewer's
+  thumbnail strip and action bar, and taps on the video went to the viewer instead.
+- **Cause:** the viewer used the player only for videos that are not on the phone
+  (`!item.local_uri`); a local one fell through to the image view. The playing video filled the
+  whole screen under the viewer's bars and was wrapped in a tap handler.
+- **Fix:** a video plays from its local file when it has one, else streams from the server. The
+  playing video stops above the viewer's top bar and bottom bars, and no tap handler wraps it.
+  Grid tiles show a play icon on videos.
+- **Files:**
+  - `apps/mobile/src/features/viewer/PhotoViewerScreen.tsx` (+ test)
+  - `apps/mobile/src/features/viewer/VideoSlide.tsx`
+  - `apps/mobile/src/components/PhotoTile.tsx`
+
+### 7. Backed-up photos lose their location
+
+- **App:** mobile
+- **Symptom:** photos backed up from the phone have no location on the server, although the
+  originals on the phone have GPS data.
+- **Cause:** on Android 10+ an app that reads photos without `ACCESS_MEDIA_LOCATION` gets a copy
+  with the GPS data removed. The app did not declare the permission. Declaring it is not enough:
+  expo-media-library's permission check answers "granted" without it (on Android 14+ the
+  selected-photos permission that comes with full access counts as granted), so it never asks.
+- **Fix:** `expo-media-library` plugin with `isAccessMediaLocationEnabled: true` in `app.json`, and
+  the media provider asks for `ACCESS_MEDIA_LOCATION` itself (through `PermissionsAndroid`) while
+  the app is in the foreground. Photos backed up before the fix stay without a location on the
+  server; their originals have different bytes, so they upload again as new photos.
+- **Files:**
+  - `apps/mobile/app.json` (`plugins`)
+  - `apps/mobile/src/sync/device/expo-media-provider.ts`
+
+### 8. New photos on the phone show up late in the app
+
+- **App:** mobile
+- **Symptom:** a photo just taken does not appear in the app until some later sync.
+- **Cause:** a camera-roll change starts a sync, but while a sync is already running the change is
+  folded into it, and that run may have scanned the camera roll already. A run with uploads takes
+  minutes.
+- **Fix:** a change that lands during a sync waits for that run and then starts another one.
+- **Files:**
+  - `apps/mobile/src/sync/run.ts`
+
+### 9. The map in the photo info shows "Access blocked"
+
+- **App:** mobile
+- **Symptom:** the map preview in a photo's info panel shows OpenStreetMap's "Access blocked" image
+  instead of a map.
+- **Cause:** the tiles were requested with the HTTP library's default User-Agent, which OSM's tile
+  usage policy blocks.
+- **Fix:** tiles are requested with a User-Agent naming the app, under a new cache key so the
+  cached "Access blocked" images are not shown again.
+- **Files:**
+  - `apps/mobile/src/features/viewer/MapPreview.tsx`
+
+### 10. Album cards in My Albums have no picture
+
+- **App:** mobile (cause on the server)
+- **Symptom:** a user album shows an empty card unless a cover was picked for it.
+- **Cause:** the server's sync feed sends only a picked cover for a user album, with no fallback.
+- **Fix:** the app uses the album's first photo when no cover was picked.
+- **Not fixed:** place albums (Albums, Places) have no picture either: the server always sends an
+  empty cover list for them (`SyncPlaceAlbumsView` in `apps/backend/api/views/sync.py`). That needs
+  a server change, and the Pi runs the upstream image.
+- **Files:**
+  - `apps/mobile/src/db/queries/albums.ts`
+  - `apps/mobile/src/db/__tests__/filters.test.ts`
+
 ## Custom changes
 
-### 6. App icon
+### 11. App icon
 
 - **App:** mobile
 - **Change:** new app icon from the icon pack in `apps/mobile/assets/AppIcons/`.
@@ -114,13 +185,27 @@ from this list if so.
   - `apps/mobile/assets/AppIcons/` (new)
   - `apps/mobile/app.json` (`icon`, `android.adaptiveIcon`)
 
-### 7. App name "DropjeBox"
+### 12. App name "DropjeBox"
 
 - **App:** mobile
 - **Change:** the name under the icon on the phone is "DropjeBox". Texts inside the app still
   say "LibrePhotos". The package name (`com.librephotosmobile`) is unchanged.
 - **Files:**
   - `apps/mobile/app.json` (`name`)
+
+### 13. Accent color setting
+
+- **App:** mobile
+- **Change:** Settings, App preferences has an **Accent color** choice: blue (the default), green,
+  red, pink, yellow, purple, orange or grey. It colors buttons, links, selections and the tab bar.
+  The accent and the theme (System, Light, Dark) are now kept across app starts; before, the theme
+  reset on every start. A new feature, not fork-specific.
+- **Files:**
+  - `apps/mobile/src/theme/accents.ts` (new), `apps/mobile/src/theme/index.ts`
+  - `apps/mobile/src/stores/settings.ts`, `apps/mobile/src/stores/auth.ts`
+  - `apps/mobile/src/lib/tokenStorage.ts`
+  - `apps/mobile/src/features/settings/SettingsScreen.tsx` (+ test)
+  - `apps/mobile/src/i18n/locales/en.ts`
 
 ## Deployment settings (not in this repository)
 
