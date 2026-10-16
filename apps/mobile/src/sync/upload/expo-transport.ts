@@ -12,13 +12,16 @@
  * against a server that has not been updated yet.
  *
  * The bytes go through `expo-file-system` `uploadAsync` (streams from disk,
- * background URLSession on iOS). v1 sends the whole file as a single chunk
- * (offset 0, full Content-Range) — valid against the chunked endpoint; true
- * multi-chunk resume is a Phase 4 enhancement (see handoff).
+ * background URLSession on iOS), in chunks of at most UPLOAD_CHUNK_SIZE bytes
+ * (see ./chunks): a single request for a whole photo was refused with a 413 by
+ * the proxy. Resuming a half-sent file across runs is still a Phase 4
+ * enhancement (see handoff); a failed run starts the file again.
  */
+import { File, Paths, type FileHandle } from "expo-file-system";
 import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library/legacy";
 import { isRecord, parseJson } from "@/lib/guards";
+import { chunkRanges, contentRange } from "./chunks";
 import type {
   UploadCompleteInput,
   UploadFileInput,
@@ -74,6 +77,29 @@ function httpError(what: string, status: number, body: string): Error {
   return new Error(detail ? `${what} failed: HTTP ${status} — ${detail}` : `${what} failed: HTTP ${status}`);
 }
 
+/**
+ * Copy `length` bytes from `start` of the open source file into a new file in
+ * the cache, for one chunk request. The caller deletes it after the request.
+ */
+function writeChunk(source: FileHandle, start: number, length: number): File {
+  source.offset = start;
+  const bytes = source.readBytes(length);
+  if (bytes.length !== length) throw new Error("asset file changed size while uploading");
+  const chunk = new File(Paths.cache, `upload-chunk-${Date.now()}-${start}`);
+  chunk.create({ overwrite: true });
+  chunk.write(bytes);
+  return chunk;
+}
+
+function deleteQuietly(file: File | null): void {
+  if (!file) return;
+  try {
+    file.delete();
+  } catch {
+    // already gone; the cache is cleared by the OS anyway
+  }
+}
+
 export function createExpoUploadTransport(deps: TransportDeps): UploadTransport {
   const base = () => deps.serverAddress().replace(/\/+$/, "");
 
@@ -106,37 +132,60 @@ export function createExpoUploadTransport(deps: TransportDeps): UploadTransport 
       const size = stat.size ?? 0;
       const md5 = input.md5 ?? stat.md5 ?? undefined;
 
-      const task = FileSystem.createUploadTask(
-        `${base()}/api/upload/`,
-        uri,
-        {
-          httpMethod: "POST",
-          sessionType: FileSystem.FileSystemSessionType.BACKGROUND,
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-          fieldName: "file",
-          mimeType: input.type === "video" ? "video/mp4" : "application/octet-stream",
-          parameters: { offset: "0", user: String(input.userId) },
-          headers: {
-            // Whole file as a single chunk: 0..size-1 / size.
-            "Content-Range": `bytes 0-${Math.max(0, size - 1)}/${size}`,
-            ...authHeaders(token, true),
-          },
-        },
-        (data) => {
-          onProgress?.({ sent: data.totalBytesSent, total: data.totalBytesExpectedToSend });
-        }
-      );
-      const result = await task.uploadAsync();
-      if (!result) throw new Error("upload failed: no response");
-      if (result.status >= 300) throw httpError("upload", result.status, result.body);
+      // At most UPLOAD_CHUNK_SIZE bytes per request: the proxy answers 413 to a
+      // larger body. A file that fits goes up straight from disk; a larger one
+      // is cut into temporary chunk files, one per request.
+      const ranges = chunkRanges(size);
+      const source = ranges.length > 1 ? new File(uri).open() : null;
       let uploadId = "";
+      let sent = 0;
       try {
-        const parsed = parseJson(result.body);
-        uploadId = isRecord(parsed) && typeof parsed.upload_id === "string" ? parsed.upload_id : "";
-      } catch {
-        throw new Error("upload response was not valid JSON");
+        for (const range of ranges) {
+          const length = range.end - range.start + 1;
+          const chunk = source ? writeChunk(source, range.start, length) : null;
+          try {
+            const task = FileSystem.createUploadTask(
+              `${base()}/api/upload/`,
+              chunk?.uri ?? uri,
+              {
+                httpMethod: "POST",
+                sessionType: FileSystem.FileSystemSessionType.BACKGROUND,
+                uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+                fieldName: "file",
+                mimeType: input.type === "video" ? "video/mp4" : "application/octet-stream",
+                parameters: {
+                  offset: String(range.start),
+                  user: String(input.userId),
+                  ...(uploadId ? { upload_id: uploadId } : {}),
+                },
+                headers: {
+                  "Content-Range": contentRange(range, size),
+                  ...authHeaders(token, true),
+                },
+              },
+              (data) => {
+                const inChunk = Math.min(data.totalBytesSent, length);
+                onProgress?.({ sent: sent + inChunk, total: size });
+              }
+            );
+            const result = await task.uploadAsync();
+            if (!result) throw new Error("upload failed: no response");
+            if (result.status >= 300) throw httpError("upload", result.status, result.body);
+            try {
+              const parsed = parseJson(result.body);
+              uploadId = isRecord(parsed) && typeof parsed.upload_id === "string" ? parsed.upload_id : "";
+            } catch {
+              throw new Error("upload response was not valid JSON");
+            }
+            if (!uploadId) throw new Error("upload response missing upload_id");
+          } finally {
+            deleteQuietly(chunk);
+          }
+          sent += Math.max(0, length);
+        }
+      } finally {
+        source?.close();
       }
-      if (!uploadId) throw new Error("upload response missing upload_id");
       return { uploadId, md5 };
     },
 

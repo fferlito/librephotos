@@ -60,9 +60,26 @@ from this list if so.
 - **Files:**
   - `apps/mobile/src/components/BottomSheet.tsx`
 
+### 4. Backup of photos over 1 MB fails
+
+- **App:** mobile
+- **Symptom:** backup never uploads photos larger than 1 MB; they stay failed in the Backup tab.
+  The proxy log shows `client intended to send too large body` and `POST /api/upload/ ... 413`
+  for every one of them.
+- **Cause:** the app sent each file in one request. The LibrePhotos proxy (nginx) keeps the
+  default `client_max_body_size` of 1 MB and refuses larger bodies. The web app is not affected
+  because it already sends 1,000,000-byte chunks.
+- **Fix:** the app sends files in chunks of at most 1,000,000 bytes, like the web app. A file
+  that fits is sent straight from disk as before; a larger one is cut into temporary chunk files
+  in the cache, deleted after each request. The split is a pure function with unit tests.
+- **Files:**
+  - `apps/mobile/src/sync/upload/chunks.ts` (new)
+  - `apps/mobile/src/sync/upload/__tests__/chunks.test.ts` (new)
+  - `apps/mobile/src/sync/upload/expo-transport.ts`
+
 ## Custom changes
 
-### 4. App icon
+### 5. App icon
 
 - **App:** mobile
 - **Change:** new app icon from the icon pack in `apps/mobile/assets/AppIcons/`.
@@ -77,7 +94,7 @@ from this list if so.
   - `apps/mobile/assets/AppIcons/` (new)
   - `apps/mobile/app.json` (`icon`, `android.adaptiveIcon`)
 
-### 5. App name "DropjeBox"
+### 6. App name "DropjeBox"
 
 - **App:** mobile
 - **Change:** the name under the icon on the phone is "DropjeBox". Texts inside the app still
