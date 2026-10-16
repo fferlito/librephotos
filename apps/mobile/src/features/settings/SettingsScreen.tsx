@@ -18,10 +18,21 @@ import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useToastStore } from "@/stores/toasts";
 import { formatBytes } from "@/lib/format";
 import { goBackOr } from "@/lib/navigation";
-import { useTheme, type ThemeColors } from "@/theme";
+import { ACCENT_NAMES, ACCENTS, useResolvedScheme, useTheme, type AccentColor, type ThemeColors } from "@/theme";
 
 /** GB choices for the thumbnail-cache cap. */
 const CAP_CHOICES_GB = [1, 2, 5, 10];
+
+const ACCENT_LABELS = {
+  blue: "settings.accentBlue",
+  green: "settings.accentGreen",
+  red: "settings.accentRed",
+  pink: "settings.accentPink",
+  yellow: "settings.accentYellow",
+  purple: "settings.accentPurple",
+  orange: "settings.accentOrange",
+  grey: "settings.accentGrey",
+} as const satisfies Record<AccentColor, string>;
 
 /**
  * Settings (doc 05 §5). App preferences (theme, language, thumb cache, backup
@@ -42,6 +53,9 @@ export function SettingsScreen() {
 
   const themePref = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const accent = useSettingsStore((s) => s.accent);
+  const setAccent = useSettingsStore((s) => s.setAccent);
+  const scheme = useResolvedScheme();
   const locale = useSettingsStore((s) => s.locale);
   const setLocale = useSettingsStore((s) => s.setLocale);
   const capBytes = useSettingsStore((s) => s.thumbCapBytes);
@@ -165,6 +179,33 @@ export function SettingsScreen() {
                 </Text>
               </Pressable>
             ))}
+          </View>
+
+          <Text style={{ color: theme.muted, fontSize: 13, marginTop: 14, marginBottom: 8 }}>
+            {t("settings.accent")}
+          </Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+            {ACCENT_NAMES.map((name) => {
+              const selected = accent === name;
+              return (
+                <Pressable
+                  key={name}
+                  testID={`accent-${name}`}
+                  onPress={() => setAccent(name)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={t(ACCENT_LABELS[name])}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: ACCENTS[name][scheme],
+                    borderWidth: 3,
+                    borderColor: selected ? theme.text : "transparent",
+                  }}
+                />
+              );
+            })}
           </View>
 
           <Pressable

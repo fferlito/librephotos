@@ -28,7 +28,7 @@ describe("SettingsScreen", () => {
     t = createTestDb();
     useAuthStore.setState({ userId: 1 });
     useToastStore.setState({ toasts: [] });
-    useSettingsStore.setState({ theme: "system", locale: "en", thumbCapBytes: 2 * 1024 * 1024 * 1024 });
+    useSettingsStore.setState({ theme: "system", accent: "blue", locale: "en", thumbCapBytes: 2 * 1024 * 1024 * 1024 });
     globalThis.__mockNetworkConnected = true;
   });
   afterEach(() => t.close());
@@ -37,6 +37,13 @@ describe("SettingsScreen", () => {
     const { getByTestId } = renderWithDb(<SettingsScreen />, t.db, client());
     fireEvent.press(getByTestId("theme-dark"));
     expect(useSettingsStore.getState().theme).toBe("dark");
+  });
+
+  it("picks an accent color", async () => {
+    const { getByTestId } = renderWithDb(<SettingsScreen />, t.db, client());
+    fireEvent.press(getByTestId("accent-green"));
+    expect(useSettingsStore.getState().accent).toBe("green");
+    expect(getByTestId("accent-green").props.accessibilityState).toEqual({ selected: true });
   });
 
   it("changes the UI language", async () => {

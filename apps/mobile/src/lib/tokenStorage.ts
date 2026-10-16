@@ -28,6 +28,25 @@ export const serverStorage = {
   },
 };
 
+const PREFERENCES_KEY = "librephotos.preferences";
+
+/** Appearance preferences (theme, accent), kept across app starts. */
+export const preferencesStorage = {
+  async get(): Promise<{ theme?: unknown; accent?: unknown } | null> {
+    const raw = await SecureStore.getItemAsync(PREFERENCES_KEY);
+    if (!raw) return null;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return typeof parsed === "object" && parsed !== null ? (parsed as { theme?: unknown; accent?: unknown }) : null;
+    } catch {
+      return null;
+    }
+  },
+  async set(preferences: { theme: string; accent: string }) {
+    await SecureStore.setItemAsync(PREFERENCES_KEY, JSON.stringify(preferences));
+  },
+};
+
 export const tokenStorage: TokenSupplier & {
   setTokens(access: string, refresh: string): Promise<void>;
 } = {

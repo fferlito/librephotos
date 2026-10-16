@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { serverStorage } from "@/lib/tokenStorage";
+import { preferencesStorage, serverStorage } from "@/lib/tokenStorage";
+import { isAccentColor, type AccentColor } from "@/theme/accents";
 
 export type ThemePreference = "system" | "light" | "dark";
 
@@ -16,6 +17,8 @@ type SettingsState = {
   /** Bare server origin, no trailing slash, no `/api` (e.g. https://demo.librephotos.com). */
   serverUrl: string | null;
   theme: ThemePreference;
+  /** Accent color of buttons, links and selections (App preferences). */
+  accent: AccentColor;
   /** Active UI locale code (e.g. "en", "de", "zh_Hans"). */
   locale: string;
   /** LRU cap for the on-device thumbnail cache (doc 01 / thumb_cache). */
@@ -24,6 +27,9 @@ type SettingsState = {
   /** Restore the persisted server URL. Must complete before any sync runs. */
   hydrateServerUrl: () => Promise<string | null>;
   setTheme: (theme: ThemePreference) => void;
+  setAccent: (accent: AccentColor) => void;
+  /** Restore the persisted theme and accent. */
+  hydratePreferences: () => Promise<void>;
   setLocale: (locale: string) => void;
   setThumbCapBytes: (bytes: number) => void;
 };
@@ -35,9 +41,14 @@ export function normalizeServerUrl(raw: string): string {
   return url.replace(/\/+$/, "");
 }
 
-export const useSettingsStore = create<SettingsState>(set => ({
+function isThemePreference(value: unknown): value is ThemePreference {
+  return value === "system" || value === "light" || value === "dark";
+}
+
+export const useSettingsStore = create<SettingsState>((set, get) => ({
   serverUrl: null,
   theme: "system",
+  accent: "blue",
   locale: "en",
   thumbCapBytes: DEFAULT_THUMB_CAP_BYTES,
   setServerUrl: url => {
@@ -52,7 +63,22 @@ export const useSettingsStore = create<SettingsState>(set => ({
     if (stored) set({ serverUrl: stored });
     return stored;
   },
-  setTheme: theme => set({ theme }),
+  setTheme: theme => {
+    set({ theme });
+    void preferencesStorage.set({ theme, accent: get().accent });
+  },
+  setAccent: accent => {
+    set({ accent });
+    void preferencesStorage.set({ theme: get().theme, accent });
+  },
+  async hydratePreferences() {
+    const stored = await preferencesStorage.get();
+    if (!stored) return;
+    set({
+      ...(isThemePreference(stored.theme) ? { theme: stored.theme } : {}),
+      ...(isAccentColor(stored.accent) ? { accent: stored.accent } : {}),
+    });
+  },
   setLocale: locale => set({ locale }),
   setThumbCapBytes: bytes => set({ thumbCapBytes: bytes }),
 }));

@@ -1,5 +1,8 @@
 import { useColorScheme } from "react-native";
 import { useSettingsStore } from "@/stores/settings";
+import { ACCENTS } from "./accents";
+
+export { ACCENTS, ACCENT_NAMES, isAccentColor, type AccentColor } from "./accents";
 
 export type ThemeColors = {
   background: string;
@@ -39,5 +42,7 @@ export function useResolvedScheme(): "light" | "dark" {
 }
 
 export function useTheme(): ThemeColors {
-  return themes[useResolvedScheme()];
+  const scheme = useResolvedScheme();
+  const accent = useSettingsStore(s => s.accent);
+  return { ...themes[scheme], brand: ACCENTS[accent][scheme] };
 }

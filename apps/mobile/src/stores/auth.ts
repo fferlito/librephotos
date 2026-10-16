@@ -27,6 +27,8 @@ export const useAuthStore = create<AuthState>(set => ({
     // soon as the router sees that status, and a run with no base URL issues
     // relative requests that hit the Metro dev server instead of LibrePhotos.
     const serverUrl = await useSettingsStore.getState().hydrateServerUrl();
+    // Theme and accent are not needed before sync; restore them alongside.
+    void useSettingsStore.getState().hydratePreferences();
     const access = await tokenStorage.getAccessToken();
     const refresh = await tokenStorage.getRefreshToken();
     // A refresh token is enough to be "authenticated" — the transport will mint
