@@ -44,7 +44,7 @@ Runs the configured tagging model over your photos to produce the scene and cont
 
 ### Add Geolocation
 
-Looks up place names for each photo's GPS coordinates (reverse geocoding) so they appear in the places view and location search. It runs automatically after each scan; a normal scan processes photos added since the last successful run started, plus every photo whose position has no place name looked up for it yet (its GPS changed in the file, or an earlier lookup failed; a position where the provider found no place, such as open sea, is not asked again until it changes), while a full scan reprocesses everything. It looks up the position LibrePhotos has stored, which the scan keeps in line with the file unless you set the location yourself. A run that was cancelled or failed before it reached every photo does not count as successful.
+Looks up place names for each photo's GPS coordinates (reverse geocoding) so they appear in the places view and location search. It runs automatically after each scan; a normal scan processes photos added since the last successful run started, plus every photo whose position has no place name looked up for it yet (its GPS changed in the file, or an earlier lookup failed; a position where the provider found no place, such as open sea, is not asked again until it changes), while a full scan goes over every photo. A photo whose place was already looked up for its position is skipped either way, so switching the Map Provider renames nothing; [Look Up Place Names](#look-up-place-names) does. It looks up the position LibrePhotos has stored, which the scan keeps in line with the file unless you set the location yourself. A run that was cancelled or failed before it reached every photo does not count as successful.
 
 ### Scan Faces
 
@@ -76,6 +76,8 @@ Runs after each scan to fix RAW files that were scanned as their own photos. For
 
 Checks the videos that were added to your library before LibrePhotos recorded each video's colour, codec and pixel format during the scan. It runs by itself after a scan, only while such videos are left, so most scans never show it. It rebuilds the thumbnails of every HDR video, which an older version made washed out (see [HDR Videos](./viewing-photos.md#hdr-videos)). It does the same for every video not stored as ordinary 8-bit 4:2:0, such as 10-bit clips or the 4:2:2 Motion JPEG files older cameras record, whose animated thumbnails an older version made in a form no browser plays. For each of these videos it also drops any converted copy kept from before, so the next playback converts it again. If a rebuild fails, the old thumbnail is kept. A video whose file cannot be read at the time — for example on a drive that is not mounted — is simply tried again after the next scan. Since 1.3.0.
 
+<Since version="1.4.0" /> After an update, an admin can also start it for every user's older videos with **Start** on the [Finish the upgrade card](../installation/upgrading.md#finish-the-upgrade).
+
 ### Extract Text (OCR)
 
 Reads the text on your photos so that search can find it, and uses it to detect documents. It only runs when you click **Extract** (or **Extract text again for all photos**) on the Library page, never after a scan by itself, and only while an administrator has selected a text recognition model. See [Text Recognition](./text-recognition.md).
@@ -96,6 +98,10 @@ Finds duplicate photos in your library using perceptual hashing. It detects both
 
 Removes the photo's EXIF and XMP (GPS position, camera serial number, keywords) and a video's location from the thumbnails LibrePhotos 1.2.1 and older wrote, across every user's library. An admin starts it with **Remove photo details from old thumbnails** under **Admin Area > Admin Tools**; see [After upgrading from 1.2.1 or older](../installation/upgrading.md#strip-thumbnail-metadata). It only rewrites thumbnails that still carry metadata, so running it again is quick and safe. Not released yet: up to 1.3.0, this was only the `strip_thumbnail_metadata` command.
 
+### Read Shutter Speeds Again
+
+<Since version="1.4.0" /> Reads the exposure time again for the photos whose shutter speed 1.3.0 or older stored wrongly, across every user's library. It runs by itself once after updating from such a release, and shows on the [Finish the upgrade card](../installation/upgrading.md#finish-the-upgrade). Only that one value is read from each photo; nothing is written to your files. See [After upgrading from 1.3.0 or older](../installation/upgrading.md#refresh-exposure-time).
+
 ### Empty Trash
 
 _Not released yet._ Started with the **Empty trash** button on the Trash page. Permanently deletes every photo in your trash, including the original files on disk. It only touches your own photos, and a photo it cannot delete is skipped and makes the job end as failed. See [Emptying the trash](./trash.md#emptying-the-trash).
@@ -103,6 +109,18 @@ _Not released yet._ Started with the **Empty trash** button on the Trash page. P
 ### Apply Date Rules
 
 _Not released yet._ Started with **Apply** under **Dates** on the Library page, or with **Apply to existing photos** on the date rules card after you saved changed rules. Reads the date of every photo of yours again with your current date rules and moves the photos whose date changed to their new day; a date you set by hand stays, and nothing is written to your files. A photo whose date cannot be read keeps its date and is listed in the job. See [Applying the rules](./settings/date-rules.md#applying-the-rules).
+
+### Write Metadata to Files
+
+_Not released yet._ Started with **Write now** under **Write edits to files** in Settings → Metadata Options. Writes the edits that are only in LibrePhotos (ratings, dates and locations you set, rotations, captions, tags and face tags) to your sidecars or media files, as that setting says; a photo with nothing to write is left alone. It ends with how many photos it wrote, and lists the photos it could not write. See [Writing the edits of a whole library](./exif-data.md#writing-the-edits-of-a-whole-library).
+
+### Look Up Place Names
+
+<Since version="1.4.0" /> Asks the Map Provider set in Site Settings again for the place of every photo with a location, across every user's library, for example after switching to ExifTool. An admin starts it with **Look up place names again** under **Admin Area > Admin Tools**, after a confirmation. Photos move to the Places albums of their new names, and the day albums name their places again; a photo whose lookup fails keeps its old place. See [Switching the provider](./places.md#switching-the-provider).
+
+### Move Photos
+
+<Since version="1.4.0" /> Started with **Move to folder…** for a selection of more than 100 photos. Moves your photos, with all their files, to another folder of your library, one photo after the other; a photo whose name is taken there is renamed or skipped as you chose. A cancel stops after the photo it is on, and the photos moved until then stay moved. It ends with how many photos moved and how many stayed where they were. See [Moving photos to another folder](./library.md#moving-photos-to-another-folder).
 
 ## Where to get information about previous run jobs
 
@@ -118,6 +136,11 @@ If a job is still running and you want to stop it, use the **Cancel** button in 
 
 The **Remove** button only deletes the log entry from the database — it does **not** stop a running job. Use it for a job that has genuinely crashed (nothing is progressing and the logs show an ungraceful failure) so that the queue will accept new jobs again.
 
-Removing a finished job is not as harmless as it looks. A normal scan only rereads files changed since the newest successful scan of the whole scan directory, and **Scan Faces** and **Add Geolocation** only cover photos added since their own newest successful run (see above). Remove that run and the next one starts from the run before it, or from the whole library if none is left, so it redoes work that was already done. The confirmation dialog says so before anything is removed.
+Removing a finished job deletes its record and result; nothing in your library changes. Two runs are different, because a later run starts from them:
+
+- The newest scan of the whole scan directory that reached every file is the reference for the next normal scan, which only rereads the files changed since then (see [Scan Photos](#scan-photos)). Without it, the next normal scan reads every file of your library again, as a full scan does. So its **Remove** button is greyed out, and pointing at it says "This scan is the reference for the next incremental scan"; LibrePhotos refuses to remove it in any other way too, also for an admin. It can be removed once a newer scan of the whole library has finished. A cancelled scan, a scan of a few selected files or a Nextcloud scan does not replace it. This scan is kept by the automatic cleanup of old jobs as well.
+- The newest complete **Add Geolocation** run: the next one looks up the photos added since it started. Remove it and the next run looks up the places of every photo added since the run before it, or of all your photos if none is left. The confirmation dialog warns about it.
+
+<Since version="1.4.0" /> Up to 1.3.0, the reference scan could be removed, and the next scan then read the whole library again. The confirmation dialog could not tell which scan was the reference, and it also warned about **Scan Faces**, which picks the photos whose faces have not been looked for whatever ran before.
 
 *Not released yet: up to 1.3.0, **Cancel** and **Remove** acted on the first click, without asking.*

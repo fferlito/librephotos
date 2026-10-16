@@ -7,15 +7,17 @@ I/O (#2336): the values are read here, through the exif sidecar, and
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.db.models import Q, QuerySet
 
-from api.geocode.photo_location import apply_file_position
+from api.geocode.photo_location import apply_file_position, usable_coordinates
 from api.metadata.photo_writer import write_target
 from api.metadata.reader import MetadataReadError, get_metadata, sidecar_files_for_photo
 from api.metadata.tags import Tags
+from api.metadata.takeout import TakeoutMetadata, takeout_metadata_of
 from api.models.photo_metadata import PhotoMetadata, format_exposure_time
 
 if TYPE_CHECKING:
@@ -114,7 +116,8 @@ def _tags_are_written(photo: Photo) -> bool:
 
 
 def read_file_values(photo: Photo) -> dict[str, object]:
-    """The values of ``EXIF_TAGS`` in the photo's file or sidecar, by name."""
+    """The values of ``EXIF_TAGS`` in the photo's file or sidecar, by name,
+    with what its Google Takeout JSON adds (``with_takeout_values``)."""
     assert photo.main_file is not None
     # Every name gets a key even if get_metadata comes back short, so the
     # appliers can index values[...] without a KeyError.
@@ -129,6 +132,24 @@ def read_file_values(photo: Photo) -> dict[str, object]:
             ),
         )
     )
+    return with_takeout_values(values, takeout_metadata_of(photo))
+
+
+def with_takeout_values(
+    values: dict[str, object], takeout: TakeoutMetadata | None
+) -> dict[str, object]:
+    """``values`` with the Takeout JSON's description as
+    ``takeout_description`` (the last caption fallback, ``description_of``)
+    and its position when the file has none (#2270)."""
+    values["takeout_description"] = takeout.description if takeout else None
+    position = takeout.position if takeout else None
+    if position is None or usable_coordinates(
+        values["gps_latitude"], values["gps_longitude"]
+    ):
+        return values
+    assert takeout is not None
+    values["gps_latitude"], values["gps_longitude"] = position
+    values["gps_altitude"] = takeout.altitude
     return values
 
 
@@ -157,39 +178,59 @@ class ExposureTimeRefresh:
     unreadable: int = 0
 
 
+#: Rows between two progress reports of ``refresh_exposure_times``.
+EXPOSURE_PROGRESS_EVERY = 100
+
+
+def _refresh_exposure_time(metadata: PhotoMetadata) -> bool | None:
+    """Read one row's ExposureTime again: whether it changed, None if unreadable."""
+    photo = metadata.photo
+    if photo.main_file is None:
+        return None
+    try:
+        (seconds,) = get_metadata(
+            photo.main_file.path,
+            tags=[Tags.EXPOSURE_TIME],
+            sidecar_files=sidecar_files_for_photo(photo),
+        )
+    except MetadataReadError:
+        return None
+    shutter_speed = format_exposure_time(seconds)
+    if shutter_speed is None or (shutter_speed, seconds) == (
+        metadata.shutter_speed,
+        metadata.shutter_speed_seconds,
+    ):
+        return False
+    metadata.shutter_speed = shutter_speed
+    metadata.shutter_speed_seconds = float(seconds)
+    metadata.save(update_fields=["shutter_speed", "shutter_speed_seconds"])
+    return True
+
+
 def refresh_exposure_times(
     metadata_rows: QuerySet[PhotoMetadata],
+    progress: Callable[[int, int], None] | None = None,
 ) -> ExposureTimeRefresh:
     """Read ExposureTime again for ``metadata_rows`` and store it as
     ``format_exposure_time`` prints it, and in seconds. Only that one tag is
     read and only the two shutter speed columns are written: no other field
-    of the photo changes."""
+    of the photo changes.
+
+    ``progress(done, total)`` is called at the start, every
+    ``EXPOSURE_PROGRESS_EVERY`` rows and at the end; what it raises (a
+    cancelled job) stops the run.
+    """
     result = ExposureTimeRefresh()
+    total = metadata_rows.count() if progress else 0
+    if progress:
+        progress(0, total)
     for metadata in metadata_rows.iterator():
         result.checked += 1
-        photo = metadata.photo
-        if photo.main_file is None:
-            result.unreadable += 1
-            continue
-        try:
-            (seconds,) = get_metadata(
-                photo.main_file.path,
-                tags=[Tags.EXPOSURE_TIME],
-                sidecar_files=sidecar_files_for_photo(photo),
-            )
-        except MetadataReadError:
-            result.unreadable += 1
-            continue
-        shutter_speed = format_exposure_time(seconds)
-        if shutter_speed is None:
-            continue
-        if (shutter_speed, seconds) == (
-            metadata.shutter_speed,
-            metadata.shutter_speed_seconds,
-        ):
-            continue
-        metadata.shutter_speed = shutter_speed
-        metadata.shutter_speed_seconds = float(seconds)
-        metadata.save(update_fields=["shutter_speed", "shutter_speed_seconds"])
-        result.updated += 1
+        changed = _refresh_exposure_time(metadata)
+        result.updated += changed is True
+        result.unreadable += changed is None
+        if progress and result.checked % EXPOSURE_PROGRESS_EVERY == 0:
+            progress(result.checked, total)
+    if progress:
+        progress(result.checked, max(total, result.checked))
     return result

@@ -12,6 +12,7 @@ import {
   IconDownload,
   IconEye,
   IconEyeOff,
+  IconFolderSymlink,
   IconGlobe,
   IconRotate2,
   IconRotateClockwise2,
@@ -23,10 +24,13 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { mediaUrl } from "../../api_client/media/mediaUrl";
 import { FAVORITE_COLOR, ICON_SIZE } from "../../uiConstants";
+import { parentFolder } from "../../util/folderPaths";
 import { StarRow, starSymbols } from "../lightbox/LightboxRating";
 import type { PhotoActions } from "../lightbox/usePhotoActions";
 import { getVariantBadgeProps } from "../lightbox/VersionComponent";
 import { AlbumEditModal } from "../modals/AlbumEdit/AlbumEditModal";
+import { MovePhotosModal } from "../movephotos/MovePhotosModal";
+import { FileActionItems } from "../photolist/FileActionItems";
 import { PhotoShareLinkModal } from "../sharing/PhotoShareLinkModal";
 import classes from "./PhotoActionTiles.module.css";
 import { fileNameOf } from "./photoPageText";
@@ -141,6 +145,8 @@ type Props = Readonly<{
 export function PhotoActionTiles({ photo, actions, onRotate, onCopy, onOpenViewer }: Props) {
   const { t } = useTranslation();
   const [albumOpened, { open: openAlbum, close: closeAlbum }] = useDisclosure(false);
+  const [moveOpened, { open: openMove, close: closeMove }] = useDisclosure(false);
+  const mainPath = photo.file_variants?.find(variant => variant.is_main)?.path ?? photo.image_path[0];
   const albumItem = { id: photo.id, image_hash: photo.image_hash, type: photo.video ? Media.VIDEO : Media.IMAGE };
 
   return (
@@ -158,7 +164,8 @@ export function PhotoActionTiles({ photo, actions, onRotate, onCopy, onOpenViewe
         <TileFace icon={<IconBookmarkPlus size={TILE_ICON} />} label={t("photopage.tiles.album")} />
       </UnstyledButton>
       <DownloadTile photo={photo} />
-      <Menu position="bottom-end">
+      {/* Wide enough for the note under Rescan file. */}
+      <Menu position="bottom-end" width={260}>
         <Menu.Target>
           <UnstyledButton className={classes.tile}>
             <TileFace icon={<IconDotsVertical size={TILE_ICON} />} label={t("photopage.tiles.more")} />
@@ -194,9 +201,14 @@ export function PhotoActionTiles({ photo, actions, onRotate, onCopy, onOpenViewe
           >
             {actions.isArchived ? t("photopage.actions.unarchive") : t("photopage.actions.archive")}
           </Menu.Item>
+          <Menu.Item leftSection={<IconFolderSymlink size={ICON_SIZE.menu} />} onClick={openMove}>
+            {t("selectionactions.movetofolder")}
+          </Menu.Item>
           <Menu.Item leftSection={<IconArrowsMaximize size={ICON_SIZE.menu} />} onClick={onOpenViewer}>
             {t("photopage.openinviewer")}
           </Menu.Item>
+          <Menu.Divider />
+          <FileActionItems photoIds={[photo.id]} single />
           <Menu.Divider />
           <Menu.Item
             color={actions.inTrash ? undefined : "red"}
@@ -211,6 +223,14 @@ export function PhotoActionTiles({ photo, actions, onRotate, onCopy, onOpenViewe
       </Menu>
       <PhotoShareLinkModal photoId={actions.sharingPhotoId} onClose={actions.closeShareLink} />
       <AlbumEditModal isOpen={albumOpened} onRequestClose={closeAlbum} selectedImages={[albumItem]} />
+      {moveOpened && (
+        <MovePhotosModal
+          opened
+          onClose={closeMove}
+          selection={{ image_hashes: [photo.image_hash] }}
+          currentFolder={mainPath === undefined ? undefined : parentFolder(mainPath)}
+        />
+      )}
     </div>
   );
 }

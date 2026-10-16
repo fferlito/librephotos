@@ -153,7 +153,7 @@ LEGACY_RE_ROUTES = frozenset(
 
 CLIENT_PATHS = {
     "/api/addface": "api.views.faces.AddFaceView",
-    "/api/albums/auto/1/": "api.views.album_auto.AlbumAutoViewSet delete=destroy,get=retrieve",
+    "/api/albums/auto/1/": "api.views.album_auto.AlbumAutoViewSet delete=destroy,get=retrieve,patch=partial_update",
     "/api/albums/auto/delete_all/": "api.views.album_auto.AlbumAutoViewSet post=delete_all",
     "/api/albums/auto/list/": "api.views.album_auto.AlbumAutoListViewSet get=list",
     "/api/albums/date/1/": "api.views.albums.AlbumDateViewSet get=retrieve",
@@ -219,6 +219,7 @@ CLIENT_PATHS = {
     "/api/photos/1/metadata": "api.views.photo_metadata.PhotoMetadataViewSet get=retrieve,patch=partial_update",
     "/api/photos/date-summary/": "api.views.photo_dates.DateSummaryView",
     "/api/photos/reapply-date-rules/": "api.views.scan_triggers.ReapplyDateRulesView",
+    "/api/photos/rescan/": "api.views.scan_triggers.RescanPhotosView",
     "/api/photos/download": "api.views.zip_downloads.ZipListPhotosView_V2",
     "/api/photos/edit/1/": "api.views.photos.PhotoEditViewSet delete=destroy,get=retrieve,patch=partial_update,put=update",
     "/api/photos/metadata/bulk": "api.views.photo_metadata.BulkMetadataView",
@@ -226,6 +227,7 @@ CLIENT_PATHS = {
     "/api/photos/located-nearby-in-time/": "api.views.photo_locations.LocatedNearbyInTimeView",
     "/api/photos/location-summary/": "api.views.photo_locations.LocationSummaryView",
     "/api/photos/no-album/": "api.views.photos.NoAlbumPhotoViewSet get=list",
+    "/api/photos/public/": "api.views.photos.PublicPhotoListViewSet get=list",
     "/api/photos/recentlyadded/": "api.views.photos.RecentlyAddedPhotoListViewSet get=list",
     "/api/photos/searchlist/": "api.views.search.SearchListViewSet get=list",
     "/api/photos/shared/fromme/": "api.views.sharing.SharedFromMePhotoSuperSimpleListViewSet get=list",
@@ -250,6 +252,7 @@ CLIENT_PATHS = {
     "/api/restore-face-labels/": "api.views.faces.RestoreFaceLabels",
     "/api/restore-faces/": "api.views.faces.RestoreFaces",
     "/api/rqavailable/": "api.views.jobs.QueueAvailabilityView",
+    "/api/scan-files/": "api.views.scan_triggers.ScanFilesView",
     "/api/scanfaces": "api.views.faces.ScanFacesView",
     "/api/scanphotos/": "api.views.scan_triggers.ScanPhotosView",
     "/api/search/metadata-values/": "api.views.search.MetadataValuesView",

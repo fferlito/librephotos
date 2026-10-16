@@ -26,6 +26,7 @@ const job = {
   progress_target: 0,
   progress_step: null,
   result: null,
+  is_scan_baseline: false,
   id: 1,
 };
 
@@ -44,6 +45,15 @@ describe("job list and detail", () => {
       `${API}/jobs/?page=2&page_size=10&mine=true`,
     ]);
     expect(defined(jobs.results[0]).job_type_str).toBe("Scan Photos");
+  });
+
+  it("reads which job is the scan baseline, and a server that does not say", async () => {
+    const { is_scan_baseline: _dropped, ...fromAnOlderServer } = job;
+    const results = [{ ...job, finished: true, is_scan_baseline: true }, fromAnOlderServer];
+    const page = { count: 2, next: null, previous: null, results, page: 1, page_size: 10, num_pages: 1 };
+    const { client } = fakeServer(page);
+    const jobs = await endpoints.fetchJobs(client, 0, 10);
+    expect(jobs.results.map(row => row.is_scan_baseline)).toEqual([true, undefined]);
   });
 
   it("reads one job", async () => {
@@ -76,6 +86,7 @@ describe("job triggers", () => {
     ["generateEventAlbums", "/autoalbumgen/", endpoints.generateEventAlbums],
     ["regenerateEventAlbumTitles", "/autoalbumtitlegen/", endpoints.regenerateEventAlbumTitles],
     ["stripThumbnailMetadata", "/strip-thumbnail-metadata/", endpoints.stripThumbnailMetadata],
+    ["lookUpPlaces", "/look-up-places/", endpoints.lookUpPlaces],
     ["emptyTrash", "/photosedit/empty-trash/", endpoints.emptyTrash],
     ["reapplyDateRules", "/photos/reapply-date-rules/", endpoints.reapplyDateRules],
   ] as const)("%s POSTs %s", async (_name, path, trigger) => {
@@ -102,22 +113,73 @@ describe("job triggers", () => {
     expect(answer).toEqual({ ...started, downloads_model: true });
   });
 
+  it("rescans chosen photos by id and reads how many it covers (#2214)", async () => {
+    const { client, requests } = fakeServer({ ...started, photo_count: 2, file_count: 3 });
+    const answer = await endpoints.rescanPhotos(client, ["p1", "p2"]);
+    expect(defined(requests[0])).toMatchObject({
+      url: `${API}/photos/rescan/`,
+      method: "POST",
+      body: { photo_ids: ["p1", "p2"] },
+    });
+    expect(answer).toEqual({ ...started, photo_count: 2, file_count: 3 });
+  });
+
+  it("scans files by path and reads the paths it left out (#900)", async () => {
+    const { client, requests } = fakeServer({ ...started, file_count: 1, ignored_paths: ["/etc/passwd"] });
+    const answer = await endpoints.scanFiles(client, ["/data/alice/a.jpg", "/etc/passwd"]);
+    expect(defined(requests[0])).toMatchObject({
+      url: `${API}/scan-files/`,
+      body: { paths: ["/data/alice/a.jpg", "/etc/passwd"] },
+    });
+    expect(answer).toEqual({ ...started, file_count: 1, ignored_paths: ["/etc/passwd"] });
+  });
+
   it("follows the job already running instead of failing on a 409", async () => {
     for (const trigger of [
       endpoints.scanNextcloudPhotos,
       endpoints.generateEventAlbums,
       endpoints.regenerateEventAlbumTitles,
       endpoints.stripThumbnailMetadata,
+      endpoints.lookUpPlaces,
       endpoints.emptyTrash,
       endpoints.reapplyDateRules,
+      (client: Parameters<typeof endpoints.rescanPhotos>[0]) => endpoints.rescanPhotos(client, ["p1"]),
+      (client: Parameters<typeof endpoints.scanFiles>[0]) => endpoints.scanFiles(client, ["/a.jpg"]),
       (client: Parameters<typeof endpoints.generateOcr>[0]) => endpoints.generateOcr(client, false),
       (client: Parameters<typeof endpoints.generateCaptions>[0]) => endpoints.generateCaptions(client, false),
       endpoints.detectStacks,
       endpoints.detectDuplicates,
+      endpoints.writeMetadataToFiles,
     ]) {
       const { client } = fakeServer(alreadyRunning, 409);
       await expect(trigger(client)).resolves.toEqual({ status: true, job_id: "j0", already_running: true });
     }
+  });
+
+  it("writes the existing edits to files: everything the settings write, or the given types", async () => {
+    const queued = { job_id: "j3", types: ["ratings", "dates"] };
+    const { client, requests } = fakeServer(queued, 202);
+    expect(await endpoints.writeMetadataToFiles(client)).toEqual(queued);
+    await endpoints.writeMetadataToFiles(client, ["ratings"]);
+    expect(defined(requests[0])).toMatchObject({ url: `${API}/savemetadata/`, method: "POST", body: {} });
+    expect(defined(requests[1]).body).toEqual({ types: ["ratings"] });
+  });
+
+  it("reads what writing the existing edits would write", async () => {
+    const preview = {
+      target: "sidecar",
+      counts: [
+        { type: "ratings", photos: 1284 },
+        { type: "dates", photos: 12 },
+      ],
+      total: 1290,
+    };
+    const { client, requests } = fakeServer(preview);
+    expect(await endpoints.fetchWriteMetadataPreview(client)).toEqual(preview);
+    expect(defined(requests[0])).toMatchObject({ url: `${API}/savemetadata/`, method: "GET" });
+
+    const off = fakeServer({ target: null, counts: [], total: 0 });
+    expect((await endpoints.fetchWriteMetadataPreview(off.client)).target).toBeNull();
   });
 
   it("starts stack and duplicate detection with their options", async () => {
@@ -178,5 +240,63 @@ describe("zip downloads", () => {
       `GET ${API}/photos/download?job_id=j3`,
       `DELETE ${API}/delete/zip/${uuid}`,
     ]);
+  });
+});
+
+describe("upgrade tasks (#2322)", () => {
+  const task = {
+    key: "probe_videos",
+    kind: "action",
+    optional: true,
+    status: "running",
+    count: 120,
+    progress_current: 40,
+    progress_target: 120,
+    latest_job_id: 7,
+    error: null,
+    completed_at: null,
+  };
+
+  it("reads the card's tasks", async () => {
+    const { client, requests } = fakeServer({ tasks: [task] });
+    const answer = await endpoints.fetchUpgradeTasks(client);
+    expect(defined(requests[0]).url).toBe(`${API}/upgrade-tasks/`);
+    expect(answer.tasks).toEqual([task]);
+  });
+
+  it("refuses a status this client does not know", async () => {
+    const { client } = fakeServer({ tasks: [{ ...task, status: "paused" }] });
+    await expect(endpoints.fetchUpgradeTasks(client)).rejects.toBeInstanceOf(ResponseParseError);
+  });
+
+  it("starts a task, and follows its job when it already runs", async () => {
+    const { client, requests } = fakeServer({
+      status: true,
+      job_id: "j1",
+      job_ids: ["j1"],
+    });
+    const answer = await endpoints.startUpgradeTask(client, "probe_videos");
+    expect(defined(requests[0])).toMatchObject({
+      url: `${API}/upgrade-tasks/probe_videos/start/`,
+      method: "POST",
+    });
+    expect(answer.job_id).toBe("j1");
+
+    const running = fakeServer(alreadyRunning, 409);
+    await expect(endpoints.startUpgradeTask(running.client, "probe_videos")).resolves.toEqual({
+      status: true,
+      job_id: "j0",
+      already_running: true,
+    });
+  });
+
+  it("dismisses an optional task and reads the tasks left", async () => {
+    const { client, requests } = fakeServer({ tasks: [] });
+    const answer = await endpoints.dismissUpgradeTask(client, "probe_videos");
+    expect(defined(requests[0])).toMatchObject({
+      url: `${API}/upgrade-tasks/probe_videos/dismiss/`,
+      method: "POST",
+    });
+    expect(answer.tasks).toEqual([]);
   });
 });

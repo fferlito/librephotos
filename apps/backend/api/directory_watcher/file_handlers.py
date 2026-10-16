@@ -30,12 +30,13 @@ from api.duplicates.perceptual_hash import (
     calculate_hash_from_thumbnail,
     calculate_perceptual_hash,
 )
-from api.metadata import photo_reader
+from api.metadata import photo_reader, takeout
 from api.metadata.photo_datetime import extract_date_time
 from api.models import File, LongRunningJob, Person, Photo, Thumbnail, User
 from api.models.file import content_hash, hash_for_owner, hash_owner_part
 from api.models.photo import PhotoQuerySet
 from api.models.photo_search import PhotoSearch
+from api.photos import indexed_mtimes
 from api.photos.file_cleanup import delete_thumbnail_files
 from api.photos.media_files import (
     calculate_hash,
@@ -728,6 +729,23 @@ def apply_device_timestamp_fallback(
     return photo
 
 
+def _observe_media(paths: list[str]) -> dict[str, indexed_mtimes.Observed]:
+    """What is on disk now for the media files among ``paths``, before they are read.
+
+    Taken before the read, so an edit made while the photo is processed
+    leaves a record older than the file and the next scan reads it again.
+    """
+    return {
+        path: indexed_mtimes.observe(path) for path in paths if not is_metadata(path)
+    }
+
+
+def _record_read(observed: dict[str, indexed_mtimes.Observed]) -> None:
+    """Record ``observed`` as what the scan read of these files (#2296)."""
+    for path, seen in observed.items():
+        indexed_mtimes.record(path, seen)
+
+
 def handle_new_image(
     user: User, path: str, job_id: UUID | str, photo: Photo | None = None
 ) -> None:
@@ -749,12 +767,14 @@ def handle_new_image(
             logger.info("job %s was cancelled, skipping %s", job_id, path)
             return
         start = datetime.datetime.now()
+        observed = _observe_media([path])
         if photo is None:
             photo = create_new_image(user, path)
             elapsed = (datetime.datetime.now() - start).total_seconds()
             logger.info("job %s: save image: %s, elapsed: %s", job_id, path, elapsed)
         if photo:
             _process_photo(photo, path, job_id, start)
+            _record_read(observed)
 
     except Exception as e:
         error = _describe_failure(path, e)
@@ -808,18 +828,49 @@ def _log_file_group_failure(
         logger.exception("job %s: could not process file group", job_id)
 
 
-def handle_file_group(user: User, file_paths: list[str], job_id: UUID | str) -> None:
+def handle_file_group(
+    user: User,
+    file_paths: list[str],
+    job_id: UUID | str,
+    rebuild_thumbnails: bool = False,
+) -> None:
     """
     Phase 2 handler: Process a group of related files into a single Photo.
 
     This is called after Phase 1 has created File records for all paths.
     Files are grouped by (directory, basename) so RAW+JPEG pairs are processed together.
 
+    A Google Takeout JSON among ``file_paths`` (Phase 1 matched it against the
+    whole directory, #2270) is read for the photo and is not one of its files.
+    No other one is looked for, so the directory is not listed again.
+
     Args:
         user: The owner of the files
         file_paths: List of file paths that share the same (directory, basename)
         job_id: Job ID for logging and progress tracking
+        rebuild_thumbnails: Render the photo's thumbnails again, also the
+            ones that exist (a rescan of chosen photos, #2214)
     """
+    takeout_names = [
+        os.path.basename(path)
+        for path in file_paths
+        if takeout.is_takeout_candidate(path)
+    ]
+    media_paths = [
+        path for path in file_paths if not takeout.is_takeout_candidate(path)
+    ]
+    known = {os.path.dirname(path): takeout_names for path in media_paths}
+    with takeout.directory_listings(known):
+        _handle_media_group(user, media_paths, job_id, rebuild_thumbnails)
+
+
+def _handle_media_group(
+    user: User,
+    file_paths: list[str],
+    job_id: UUID | str,
+    rebuild_thumbnails: bool = False,
+) -> None:
+    """``handle_file_group`` for the group's media files and XMP sidecars."""
     error = None
     try:
         # Cancelling a scan does not take the groups the cluster has already
@@ -829,12 +880,13 @@ def handle_file_group(user: User, file_paths: list[str], job_id: UUID | str) -> 
             logger.info("job %s was cancelled, skipping a file group", job_id)
             return
         start = datetime.datetime.now()
+        observed = _observe_media(file_paths)
 
         files = _collect_file_records(user, file_paths)
         if not files:
             if not any(looks_like_media(path) for path in file_paths):
-                # A RawTherapee .pp3, an Apple .aae, a Takeout .json: nothing
-                # here is a photo, so there is nothing to report as failed.
+                # A RawTherapee .pp3, an Apple .aae: nothing here is a
+                # photo, so there is nothing to report as failed.
                 logger.info("job %s: ignoring non-media files: %s", job_id, file_paths)
                 return
             error = f"No valid files in group: {file_paths}"
@@ -868,7 +920,10 @@ def handle_file_group(user: User, file_paths: list[str], job_id: UUID | str) -> 
 
         # Process the photo (thumbnails, EXIF, etc.) using main_file
         if photo.main_file:
-            _process_photo(photo, photo.main_file.path, job_id, start)
+            _process_photo(
+                photo, photo.main_file.path, job_id, start, rebuild_thumbnails
+            )
+            _record_read(observed)
 
     except Exception as e:
         _log_file_group_failure(job_id, file_paths, e)
@@ -941,8 +996,28 @@ def _read_metadata(
     logger.debug("job %s: extract date time: %s, elapsed: %s", job_id, path, elapsed)
 
 
+def _render_thumbnails(photo: Photo, thumbnail: Thumbnail, rebuild: bool) -> None:
+    """Render the photo's missing thumbnails, or with ``rebuild`` all of them.
+
+    A rebuild keeps the old thumbnails when rendering fails, and drops a
+    video's cached playable copy, so a rescan of chosen photos (#2214) fixes
+    a wrong thumbnail or copy whose file did not change.
+    """
+    if not rebuild:
+        render.generate_thumbnail(thumbnail)
+        return
+    thumbnail.photo = photo
+    if photo.video:
+        transcode_cache.discard(photo.image_hash)
+    render.regenerate_thumbnails(thumbnail, keep_old_on_failure=True)
+
+
 def _process_photo(
-    photo: Photo, path: str, job_id: UUID | str, start: datetime.datetime
+    photo: Photo,
+    path: str,
+    job_id: UUID | str,
+    start: datetime.datetime,
+    rebuild_thumbnails: bool = False,
 ) -> None:
     """
     Process a photo: generate thumbnails, extract EXIF, calculate hashes, etc.
@@ -954,6 +1029,7 @@ def _process_photo(
         path: The main file path (for logging)
         job_id: Job ID for logging
         start: Start time for elapsed time calculation
+        rebuild_thumbnails: Render every thumbnail again, not only the missing ones
     """
     logger.info("job %s: handling image %s", job_id, path)
 
@@ -987,7 +1063,7 @@ def _process_photo(
     if rebuild_fields:
         _rebuild_made_before_probe(photo, thumbnail, rebuild_fields, job_id, path)
     else:
-        render.generate_thumbnail(thumbnail)
+        _render_thumbnails(photo, thumbnail, rebuild_thumbnails and not created)
     elapsed = (datetime.datetime.now() - start).total_seconds()
     logger.debug("job %s: generate thumbnails: %s, elapsed: %s", job_id, path, elapsed)
 

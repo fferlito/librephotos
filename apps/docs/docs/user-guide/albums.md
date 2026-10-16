@@ -16,6 +16,8 @@ Albums you create manually to organize photos however you like. You can add any 
 ### People Albums
 Automatically generated albums based on face recognition. Each recognized person gets their own album.
 
+The People page shows each person as a round picture of their cover face, the same face the Albums page shows; their name and number of faces sit under it. Choosing **Set as cover…** on a person's page also makes that person's face in the photo their cover face. A person whose face has no picture yet shows the whole cover photo instead, and a person without faces shows a placeholder. (Not released yet: up to 1.3.0, the People page showed the whole cover photo for everyone.)
+
 A person's page has a **⋮** button (**Person actions**) at the right of its header:
 
 - **Rename** renames the person. A name another person already has offers **Merge into** that person instead (see below).
@@ -63,6 +65,14 @@ Event titles follow the language you picked for the web app: "Wednesday Afternoo
 
 *Not released yet: up to 1.3.0, event titles were always English.*
 
+An event's cover on the **Events** page is its first photo until you pick another one with **Event actions** (⋮) → **Set as cover…** on the event's page (see [Setting an Album Cover](#setting-an-album-cover)). Running **Generate Event Albums** again keeps your pick: events are updated in place and only gain photos, and when new photos join two events into one, the merged event keeps the older event's cover, or the other one's if the older had none. **Delete all event albums** (Admin area, **Admin Tools**) removes the picks along with the events. A cover you hide or move to the trash later is replaced by the first photo again.
+
+### Folders
+
+The **Folders** page lists the folders of your scan directory. Each tile shows the newest photo in the folder or below it (by the date it was taken), with a small folder badge in its corner so that folders do not look like albums. Hidden photos, photos in the trash and other users' photos are never a folder's cover. The **All subfolders** list on a folder's page shows the same photo next to each folder.
+
+<Since version="1.4.0" /> Up to 1.3.0, every folder showed the same folder icon.
+
 ### Places Albums
 Automatically generated albums based on the GPS location data in your photos.
 
@@ -102,16 +112,18 @@ Each page remembers its order in your browser, so going **Back** from an album r
 
 ## Setting an Album Cover
 
-You can customize the cover image for **People Albums** and **User Albums**. There are two ways to do this:
+You can customize the cover image for **People Albums**, **User Albums** and **Events**. There are two ways to do this:
 
 ### Method 1: Using the Cover Picker (Recommended)
 
-1. Navigate to the album you want to customize (People or User Album)
-2. Click the **three-dot menu** (⋮) at the right of the album's header (**Album actions**, or **Person actions** on a person's page)
+1. Navigate to the album you want to customize (a person, a user album or an event)
+2. Click the **three-dot menu** (⋮) at the right of the album's header (**Album actions**, **Person actions** on a person's page, **Event actions** on an event's page)
 3. Click **"Set as cover…"**
 4. A modal will open showing all photos in the album
 5. Click on the photo you want to use as the cover
 6. The cover is set immediately
+
+On an event, the picker marks the cover in use and starts with **Automatic**, which goes back to the event's first photo.
 
 :::tip
 The cover picker loads photos in batches of 50 for better performance. Click "Load more photos" to see additional photos if your album is large.
@@ -128,8 +140,10 @@ If you already know which photo you want to use:
 5. The selected photo becomes the cover immediately
 
 :::note
-"Set as cover…" and "Set album cover" only appear on a People Album or User Album. They won't be visible on other pages like the main timeline or auto-generated albums.
+"Set as cover…" and "Set album cover" only appear on a People Album, a User Album or an Event. They won't be visible on other pages like the main timeline, Things or Places. Folder covers are always the newest photo.
 :::
+
+<Since version="1.4.0" /> Up to 1.3.0, an event's cover could not be changed.
 
 *Not released yet: up to 1.3.0, the cover picker was "Set album cover" in the selection toolbar's ⋮ with nothing selected.*
 

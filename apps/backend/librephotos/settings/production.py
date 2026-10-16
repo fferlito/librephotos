@@ -273,6 +273,7 @@ CONSTANCE_ADDITIONAL_FIELDS = {
         {
             "widget": "django.forms.Select",
             "choices": (
+                ("exiftool", "ExifTool (offline, built in)"),
                 ("mapbox", "Mapbox"),
                 ("maptiler", "MapTiler"),
                 ("nominatim", "Nominatim (OpenStreetMap)"),
@@ -289,6 +290,18 @@ CONSTANCE_ADDITIONAL_FIELDS = {
                 ("photoprism", "PhotoPrism (default)"),
                 ("osm", "OpenStreetMap"),
                 ("none", "None (disable map display)"),
+            ),
+        },
+    ],
+    "auto_scan": [
+        "django.forms.fields.ChoiceField",
+        {
+            "widget": "django.forms.Select",
+            "choices": (
+                ("off", "Off"),
+                ("hourly", "Every hour"),
+                ("daily", "Every day"),
+                ("custom", "On the days in AUTO_SCAN_DAYS"),
             ),
         },
     ],
@@ -377,8 +390,35 @@ CONSTANCE_CONFIG = {
         " included. 0 keeps photos in the trash until their owner empties it.",
         int,
     ),
+    # The automatic library scan (#235, api/directory_watcher/scan_schedule.py).
+    # Saving them in the site settings rewrites its django-q schedule; so does
+    # start_cleaning_service when the server starts.
+    "AUTO_SCAN": (
+        "off",
+        "Scan every user's library for new and changed files automatically:"
+        " off, every hour, every day, or on the days in AUTO_SCAN_DAYS.",
+        "auto_scan",
+    ),
+    "AUTO_SCAN_TIME": (
+        "03:00",
+        "When a daily or custom automatic scan starts, HH:MM in the server's"
+        " time zone (TIME_ZONE).",
+        str,
+    ),
+    "AUTO_SCAN_DAYS": (
+        "0,1,2,3,4",
+        "The days a custom automatic scan runs, comma separated: 0 is Monday,"
+        " 6 is Sunday.",
+        str,
+    ),
+    "AUTO_SCAN_LAST_RUN": (
+        "",
+        "Written by the automatic scan, not a setting: when it last ran and"
+        " which libraries it scanned, skipped or could not start (JSON).",
+        str,
+    ),
     "MAP_API_PROVIDER": (
-        env_str("MAP_API_PROVIDER", "nominatim"),
+        env_str("MAP_API_PROVIDER", "exiftool"),
         "Map Provider",
         "map_api_provider",
     ),
@@ -554,6 +594,12 @@ SPECTACULAR_SETTINGS = {
         "KindEnum": "api.serializers.face.PERSON_KINDS",
         # A file of the All metadata view: the media file or a sidecar.
         "RawMetadataFileKindEnum": "api.serializers.photo_metadata.RAW_METADATA_FILE_KINDS",
+        # What "Write metadata to files" writes, and where (#2287).
+        "MetadataWriteTypeEnum": "api.serializers.photos.METADATA_WRITE_TYPES",
+        "MetadataWriteTargetEnum": "api.serializers.photos.METADATA_WRITE_TARGETS",
+        # Moving photos to another folder (#352): a taken name, a refused photo.
+        "MoveOnConflictEnum": "api.serializers.photo_moves.ON_CONFLICT_CHOICES",
+        "MoveRefusalReasonEnum": "api.serializers.photo_moves.MOVE_REFUSAL_REASONS",
     },
     "POSTPROCESSING_HOOKS": [
         "drf_spectacular.hooks.postprocess_schema_enums",

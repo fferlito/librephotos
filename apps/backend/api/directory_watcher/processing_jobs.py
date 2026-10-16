@@ -25,16 +25,18 @@ from api.faces import photo_faces
 from api.faces.classify import cluster_all_faces
 from api.faces.photo_faces import extract_faces
 from api.geocode.photo_location import (
+    HAS_POSITION,
     add_location_to_album_dates,
     geolocate_photo,
     needs_geocoding,
 )
 from api.jobs.queue import enqueue_task
 from api.mime import CV2_DECODABLE_EXTENSIONS, extension
-from api.models import Face, LongRunningJob, Photo, User
+from api.models import AlbumDate, Face, LongRunningJob, Photo, User
 from api.models.album_thing import AlbumThing
 from api.models.photo_caption import PhotoCaption
 from api.models.photo_ocr import PhotoOcr
+from api.photos.paths import folder_path_q
 from api.runtime import sidecars
 from api.runtime.ml_models import captioning_model_exists
 from api.search import semantic
@@ -142,8 +144,9 @@ def _queue_per_photo_tasks(
     photos: QuerySet[Photo],
     job_id: UUID | str,
     cancelled_message: str,
+    **task_kwargs: object,
 ) -> None:
-    """Queue ``task(photo_id, job_id)`` for each photo.
+    """Queue ``task(photo_id, job_id, **task_kwargs)`` for each photo.
 
     The queue gets primary keys, not pickled ``Photo`` instances: the payload
     stays small and the worker works on the row as it is when the task runs.
@@ -152,7 +155,7 @@ def _queue_per_photo_tasks(
     for idx, photo_id in enumerate(photo_ids):
         if _scan_cancelled(idx, job_id, cancelled_message):
             return
-        enqueue_task(task, photo_id, job_id)
+        enqueue_task(task, photo_id, job_id, **task_kwargs)
 
 
 def _photo_for_task(photo_id: UUID | Photo, job_id: UUID | str) -> Photo | None:
@@ -684,19 +687,27 @@ def classify_media(user: User, job_id: UUID) -> None:
         lrj.fail(error=err)
 
 
-def videos_to_probe(user: User) -> QuerySet[Photo]:
-    """The user's videos the scan has never probed: indexed before #2045.
+UNPROBED_VIDEO = Q(
+    video=True,
+    video_color_transfer__isnull=True,
+    main_file__isnull=False,
+    main_file__missing=False,
+    removed=False,
+)
+
+
+def unprobed_videos() -> QuerySet[Photo]:
+    """Every user's videos the scan has never probed: indexed before #2045.
 
     A file flagged missing is left out: probing it can only fail, and counting
     it would queue this job after every scan until the drive comes back.
     """
-    return Photo.objects.owned_by(user).filter(
-        video=True,
-        video_color_transfer__isnull=True,
-        main_file__isnull=False,
-        main_file__missing=False,
-        removed=False,
-    )
+    return Photo.objects.filter(UNPROBED_VIDEO)
+
+
+def videos_to_probe(user: User) -> QuerySet[Photo]:
+    """The user's ``unprobed_videos``."""
+    return Photo.objects.owned_by(user).filter(UNPROBED_VIDEO)
 
 
 def _repair_probed_video(photo: Photo, fields: list[str]) -> None:
@@ -813,13 +824,43 @@ def add_geolocation(user: User, job_id: UUID, full_scan: bool = False) -> None:
         lrj.fail(error=err)
 
 
-def geolocation_job(photo_id: UUID | Photo, job_id: UUID) -> None:
+def look_up_places(user: User, job_id: UUID) -> None:
+    """Look the place of every photo with a position up again (#2302).
+
+    Every user's photos, with the Map Provider set now: switching the
+    provider renames nothing by itself, so an admin starts this afterwards.
+    The day albums' places start over, since each photo adds its town back
+    (a cancelled run leaves the days of the photos it did not reach without
+    one until a full run); the Places albums of the old names are left empty.
+    """
+    lrj = LongRunningJob.claim(user, LongRunningJob.JOB_LOOK_UP_PLACES, job_id)
+    if lrj is None:
+        return
+    try:
+        photos = Photo.objects.filter(HAS_POSITION)
+        if not _begin_photo_scan(lrj, photos):
+            return
+        AlbumDate.objects.exclude(location=None).update(location=None)
+        _queue_per_photo_tasks(
+            geolocation_job,
+            photos,
+            job_id,
+            "Look up place names job cancelled",
+            force=True,
+        )
+    except Exception as err:
+        logger.exception("An error occurred: ")
+        lrj.fail(error=err)
+
+
+def geolocation_job(photo_id: UUID | Photo, job_id: UUID, force: bool = False) -> None:
     """
     Worker task to add geolocation for a single photo.
 
     Args:
         photo_id: Primary key of the photo to process
         job_id: Job ID for tracking progress
+        force: Look the place up even when the stored one is current
     """
     photo = _photo_for_task(photo_id, job_id)
     if photo is None:
@@ -827,7 +868,7 @@ def geolocation_job(photo_id: UUID | Photo, job_id: UUID) -> None:
     failed = False
     error = None
     try:
-        geolocate_photo(photo)
+        geolocate_photo(photo, force=force)
         add_location_to_album_dates(photo)
     except Exception as err:
         logger.exception("An error occurred: ")
@@ -856,27 +897,54 @@ def _extract_faces_for_photo(photo: Photo, job_id: UUID) -> Exception | None:
     return failure
 
 
-def _faces_to_scan(user: User, full_scan: bool) -> QuerySet[Photo]:
+def _faces_to_scan(
+    user: User,
+    full_scan: bool,
+    path: str | None = None,
+    photo_ids: list[str] | None = None,
+) -> QuerySet[Photo]:
     """The photos a Scan Faces covers: every one, or those not scanned yet.
 
     Not scanned: new, the face service failed on them (#2199), or their file
     was replaced. A window of photos added since the last run would miss the
-    last two.
+    last two. ``path`` narrows them to the photos with a file in that folder
+    or below it, ``photo_ids`` to those photos (#524).
     """
     photos = Photo.objects.owned_by(user).filter(thumbnail__thumbnail_big__isnull=False)
+    if path:
+        photos = photos.filter(
+            pk__in=Photo.objects.owned_by(user)
+            .filter(folder_path_q("files__path", path))
+            .values("pk")
+        )
+    if photo_ids is not None:
+        photos = photos.filter(pk__in=photo_ids)
     if full_scan:
         return photos
     return photos.filter(faces_scanned_at__isnull=True)
 
 
-def scan_faces(user: User, job_id: UUID, full_scan: bool = False) -> None:
+def scan_faces(
+    user: User,
+    job_id: UUID,
+    full_scan: bool = False,
+    path: str | None = None,
+    photo_ids: list[str] | None = None,
+) -> None:
     """
     Detect and extract faces from photos.
+
+    Which photos have been looked at is kept per photo
+    (``Photo.faces_scanned_at``), so a run over a folder or a few photos
+    leaves the others to the next incremental run: there is no run-wide
+    baseline that a partial run could move past them.
 
     Args:
         user: The user whose photos to process
         job_id: Job ID for tracking progress
         full_scan: If True, process all photos; otherwise those not scanned yet
+        path: Only the photos with a file in this folder or below it (#524)
+        photo_ids: Only these photos of the user's (#524)
     """
     lrj = LongRunningJob.claim(user, LongRunningJob.JOB_SCAN_FACES, job_id)
     if lrj is None:
@@ -885,7 +953,7 @@ def scan_faces(user: User, job_id: UUID, full_scan: bool = False) -> None:
     try:
         # Needs no face service, and photos already scanned have such faces too (#2642)
         photo_faces.restore_missing_crops(user)
-        existing_photos = _faces_to_scan(user, full_scan)
+        existing_photos = _faces_to_scan(user, full_scan, path, photo_ids)
         if not _begin_photo_scan(lrj, existing_photos):
             return
 

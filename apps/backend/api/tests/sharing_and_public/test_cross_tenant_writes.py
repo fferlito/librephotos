@@ -21,6 +21,7 @@ naming the route and saying out loud that it cannot reference photos.
 """
 
 import json
+import os
 import uuid
 from collections.abc import Iterable, Mapping
 from collections.abc import Set as AbstractSet
@@ -54,6 +55,7 @@ from api.tests.infra.routes import (
 )
 from api.tests.uploads.test_upload_into_album import UploadIntoAlbumTestBase
 from api.tests.utils import (
+    TEST_MEDIA_ROOT,
     create_test_album_auto,
     create_test_album_collection,
     create_test_album_date,
@@ -95,19 +97,21 @@ NOT_PHOTO_SCOPED = {
     "api/email-config/test/": "admin-only mail config",
     "api/upload/": "chunked upload into the requester's library",
     "api/upload/complete/": "completes only the requester's own upload; its album_id is owner-scoped (UploadIntoAlbumCrossTenantTest)",
-    "api/savemetadata/": "writes the requester's own photos' metadata to disk",
+    "api/savemetadata/": "queues a job writing the requester's own photos' metadata to disk",
     "api/trainfaces/": "queues a job on the requester's own faces",
     "api/clusterfaces/": "queues a job on the requester's own faces",
     "api/scanphotos/": "scans the requester's own library",
     "api/scanuploadedphotos/": "scans the requester's own uploads",
     "api/fullscanphotos/": "scans the requester's own library",
-    "api/scanfaces/": "queues a job on the requester's own photos",
     "api/deletemissingphotos/": "queues a job on the requester's own photos",
     "api/classifymedia/": "queues a job on the requester's own photos",
     "api/generateocr/": "queues a job on the requester's own photos",
     "api/generate-captions/": "queues a job on the requester's own photos",
     "api/photos/reapply-date-rules/": "queues a job on the requester's own photos",
     "api/strip-thumbnail-metadata/": "admin-only, instance-wide thumbnail cleanup job",
+    "api/upgrade-tasks/<slug:key>/start/": "admin-only, instance-wide post-upgrade jobs",
+    "api/upgrade-tasks/<slug:key>/dismiss/": "admin-only, instance-wide post-upgrade card state",
+    "api/look-up-places/": "admin-only, instance-wide place name lookup job",
     "api/autoalbumgen/": "queues a job on the requester's own photos",
     "api/autoalbumtitlegen/": "queues a job on the requester's own albums",
     "api/stacks/detect/": "queues a job on the requester's own photos",
@@ -322,10 +326,7 @@ class CrossTenantWriteTest(TestCase):
         self.a_photo = create_test_photo(owner=self.attacker)
         self.a_photo2 = create_test_photo(owner=self.attacker)
         self.a_tag = create_test_tag(name="attacker-tag", owner=self.attacker)
-        self.a_album = create_test_album_user(title="Loot", owner=self.attacker)
-        self.a_collection = create_test_album_collection(
-            name="Loot Collection", owner=self.attacker
-        )
+        self._attacker_albums()
         self.a_stack = create_test_stack(
             owner=self.attacker, stack_type="manual", primary_photo=self.a_photo
         )
@@ -342,11 +343,17 @@ class CrossTenantWriteTest(TestCase):
             p.image_hash for p in self.victim_photos
         }
 
+        self._stub_side_effects()
+
+    def _stub_side_effects(self):
+        """No disk check, no download job; the attacker gets a library (#352)."""
         disk = patch("shutil.disk_usage")
         disk.start().return_value.free = 10**12
         self.addCleanup(disk.stop)
         self.download_job = patch("api.views.zip_downloads.create_download_job").start()
         self.download_job.return_value = "job"
+        # So a move gets past the target check and reaches the photo scope.
+        patch("api.photos.moves.library_roots", return_value=[TEST_MEDIA_ROOT]).start()
         self.addCleanup(patch.stopall)
 
     # ------------------------------------------------------------ cases
@@ -382,6 +389,15 @@ class CrossTenantWriteTest(TestCase):
             ),
         ]
 
+    def _attacker_albums(self):
+        """An album, an event of their own photos (#429) and a collection."""
+        self.a_album = create_test_album_user(title="Loot", owner=self.attacker)
+        self.a_auto = create_test_album_auto(title="Loot Event", owner=self.attacker)
+        self.a_auto.photos.add(self.a_photo, self.a_photo2)
+        self.a_collection = create_test_album_collection(
+            name="Loot Collection", owner=self.attacker
+        )
+
     def _person_groups(self):
         """A group of each user's (#1126): the victim's holds their person."""
         self.v_group = create_test_person_group(
@@ -413,6 +429,10 @@ class CrossTenantWriteTest(TestCase):
             "/api/photosedit/location/", lat=41.1, lon=-8.6, overwrite=True
         )
         cases += self._bulk("/api/photos/location-summary/")
+        cases += self._bulk("/api/photos/move/preview/", target_folder=TEST_MEDIA_ROOT)
+        cases += self._bulk(
+            "/api/photos/move/", target_folder=TEST_MEDIA_ROOT, on_conflict="rename"
+        )
         cases += self._bulk(
             "/api/photosedit/share", val_shared=True, target_user_id=self.target.id
         )
@@ -582,6 +602,24 @@ class CrossTenantWriteTest(TestCase):
                 {"image_hash": self.v_pub.image_hash, "rating": 5},
             ),
             ("patch", f"/api/albums/auto/{self.v_auto.pk}/", {"favorited": True}),
+            # the cover of an event (#429): a victim's photo on the attacker's
+            # event, and any photo on the victim's
+            (
+                "patch",
+                f"/api/albums/auto/{self.a_auto.pk}/",
+                {"cover_photo": str(self.v_pub.pk)},
+            ),
+            (
+                "patch",
+                f"/api/albums/auto/{self.v_auto.pk}/",
+                {"cover_photo": str(self.v_pub.pk)},
+            ),
+            (
+                "patch",
+                f"/api/albums/auto/{self.v_auto.pk}/",
+                {"cover_photo": str(self.a_photo.pk)},
+            ),
+            ("patch", f"/api/albums/auto/{self.v_auto.pk}/", {"cover_photo": None}),
             ("put", f"/api/albums/auto/{self.v_auto.pk}/", {"favorited": True}),
             ("delete", f"/api/albums/auto/{self.v_auto.pk}/", None),
             ("patch", f"/api/albums/thing/{self.v_thing.pk}/", {"favorited": True}),
@@ -612,6 +650,20 @@ class CrossTenantWriteTest(TestCase):
                 "post",
                 f"/api/persons/{self.v_person.pk}/remove-photos/",
                 {"photo_ids": self._ids()},
+            ),
+            # Reading the victim's files again (#2214, #900) or detecting
+            # their faces again (#524): by photo id, by path and by folder.
+            ("post", "/api/photos/rescan/", {"photo_ids": self._ids()}),
+            (
+                "post",
+                "/api/scan-files/",
+                {"paths": [p.main_file.path for p in self.victim_photos]},
+            ),
+            ("post", "/api/scanfaces/", {"photo_ids": self._ids()}),
+            (
+                "post",
+                "/api/scanfaces/",
+                {"path": os.path.dirname(self.v_pub.main_file.path)},
             ),
             (
                 "post",

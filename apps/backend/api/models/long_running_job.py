@@ -111,6 +111,36 @@ class LongRunningJobQuerySet(OwnedQuerySet["LongRunningJob"]):
             .order_by("-finished_at", "-id")
         )
 
+    def with_scan_baseline_flag(self) -> LongRunningJobQuerySet:
+        """Annotate ``is_scan_baseline``: whether the row is its starter's scan baseline.
+
+        That is the run ``LongRunningJob.baseline_for(row.started_by,
+        JOB_SCAN_PHOTOS)`` returns, the one the next incremental scan compares
+        the library against. Removing it would make that scan read every file
+        again (#1104). One correlated subquery inside the same query, so a
+        list of jobs pays no query per row.
+        """
+        # The starter of each row, not a scope to a user: every row is
+        # compared with the baseline of whoever started it.
+        baseline = (
+            LongRunningJob.objects.filter(started_by=models.OuterRef("started_by"))
+            .baselines(LongRunningJob.JOB_SCAN_PHOTOS)
+            .values("pk")[:1]
+        )
+        return self.annotate(
+            is_scan_baseline=models.Case(
+                # CASE stops at the first match: the subquery only runs for a
+                # finished scan, never for /api/rqavailable/'s running job.
+                models.When(
+                    ~models.Q(job_type=LongRunningJob.JOB_SCAN_PHOTOS, finished=True),
+                    then=models.Value(False),
+                ),
+                models.When(pk=models.Subquery(baseline), then=models.Value(True)),
+                default=models.Value(False),
+                output_field=models.BooleanField(),
+            )
+        )
+
 
 class LongRunningJob(models.Model):
     # How often ``stop_if_cancelled`` reads the row: a loop may call it on
@@ -142,6 +172,10 @@ class LongRunningJob(models.Model):
     JOB_EMPTY_TRASH = 24
     JOB_GENERATE_CAPTIONS = 25
     JOB_REAPPLY_DATE_RULES = 26
+    JOB_WRITE_METADATA = 27
+    JOB_REFRESH_EXPOSURE_TIMES = 28
+    JOB_LOOK_UP_PLACES = 29
+    JOB_MOVE_PHOTOS = 30
 
     JOB_TYPES = (
         (JOB_SCAN_PHOTOS, "Scan Photos"),
@@ -168,6 +202,10 @@ class LongRunningJob(models.Model):
         (JOB_EMPTY_TRASH, "Empty Trash"),
         (JOB_GENERATE_CAPTIONS, "Generate Captions"),
         (JOB_REAPPLY_DATE_RULES, "Apply Date Rules"),
+        (JOB_WRITE_METADATA, "Write Metadata to Files"),
+        (JOB_REFRESH_EXPOSURE_TIMES, "Read Shutter Speeds Again"),
+        (JOB_LOOK_UP_PLACES, "Look Up Place Names"),
+        (JOB_MOVE_PHOTOS, "Move Photos"),
     )
 
     # The ``result`` key a photo scan of the user's whole scan directory sets.

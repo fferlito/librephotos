@@ -65,6 +65,7 @@ from api.views import (
     photo_dates,
     photo_locations,
     photo_metadata,
+    photo_moves,
     photos,
     public_albums,
     public_photos,
@@ -80,6 +81,7 @@ from api.views import (
     sync,
     tags,
     timezone,
+    upgrade_tasks,
     upload,
     user,
     zip_downloads,
@@ -304,11 +306,16 @@ urlpatterns = [
         name="media",
     ),
     # Ahead of the router: its api/photos/<pk>/ route would take "no-album",
-    # "date-summary", "reapply-date-rules" and the two location routes below them.
+    # "public", "date-summary", "reapply-date-rules", "rescan", "move" and the two location routes below them.
     path(
         "api/photos/no-album/",
         photos.NoAlbumPhotoViewSet.as_view({"get": "list"}),
         name="photos_no_album",
+    ),
+    path(
+        "api/photos/public/",
+        photos.PublicPhotoListViewSet.as_view({"get": "list"}),
+        name="photos_public",
     ),
     path(
         "api/photos/date-summary/",
@@ -326,9 +333,29 @@ urlpatterns = [
         name="photos_location_summary",
     ),
     path(
+        "api/photos/move/",
+        photo_moves.MovePhotosView.as_view(),
+        name="photos_move",
+    ),
+    path(
+        "api/photos/move/preview/",
+        photo_moves.MovePhotosPreviewView.as_view(),
+        name="photos_move_preview",
+    ),
+    path(
+        "api/photos/move/folders/",
+        photo_moves.MoveFoldersView.as_view(),
+        name="photos_move_folders",
+    ),
+    path(
         "api/photos/reapply-date-rules/",
         scan_triggers.ReapplyDateRulesView.as_view(),
         name="photos_reapply_date_rules",
+    ),
+    path(
+        "api/photos/rescan/",
+        scan_triggers.RescanPhotosView.as_view(),
+        name="photos_rescan",
     ),
     re_path(r"^", include(router.urls)),
     # Health probes - unauthenticated, and under /api/ because the proxy only
@@ -381,6 +408,7 @@ urlpatterns = [
     re_path(r"^api/scanuploadedphotos/?$", scan_triggers.FullScanPhotosView.as_view()),
     re_path(r"^api/fullscanphotos/?$", scan_triggers.FullScanPhotosView.as_view()),
     re_path(r"^api/scanfaces/?$", faces.ScanFacesView.as_view()),
+    path("api/scan-files/", scan_triggers.ScanFilesView.as_view()),
     re_path(
         r"^api/deletemissingphotos/?$", scan_triggers.DeleteMissingPhotosView.as_view()
     ),
@@ -391,6 +419,16 @@ urlpatterns = [
         "api/strip-thumbnail-metadata/",
         scan_triggers.StripThumbnailMetadataView.as_view(),
     ),
+    path("api/upgrade-tasks/", upgrade_tasks.UpgradeTaskListView.as_view()),
+    path(
+        "api/upgrade-tasks/<slug:key>/start/",
+        upgrade_tasks.UpgradeTaskStartView.as_view(),
+    ),
+    path(
+        "api/upgrade-tasks/<slug:key>/dismiss/",
+        upgrade_tasks.UpgradeTaskDismissView.as_view(),
+    ),
+    path("api/look-up-places/", scan_triggers.LookUpPlacesView.as_view()),
     re_path(r"^api/autoalbumgen/?$", album_auto.AutoAlbumGenerateView.as_view()),
     re_path(
         r"^api/autoalbumtitlegen/?$", album_auto.RegenerateAutoAlbumTitles.as_view()

@@ -29,6 +29,10 @@ export const CONTRACT_MAP: Readonly<Record<string, ContractEntry>> = {
     schema: S.PhotosNotInAlbumResponse,
     components: ["PaginatedPhotoSummaryList"],
   },
+  MyPublicPhotosResponse: {
+    schema: S.MyPublicPhotosResponse,
+    components: ["PaginatedPhotoSummaryList"],
+  },
   SharedFromMePhoto: { schema: S.SharedFromMePhoto, components: ["SharedFromMePhotoThrough"] },
   PhotoMetadata: { schema: S.PhotoMetadata, components: ["PhotoMetadata"] },
   MetadataEdit: { schema: S.MetadataEdit, components: ["MetadataEdit"] },
@@ -53,6 +57,7 @@ export const CONTRACT_MAP: Readonly<Record<string, ContractEntry>> = {
   EventTitleParts: { schema: S.EventTitleParts, components: ["EventTitleParts"] },
   AutoAlbumInfo: { schema: S.AutoAlbumInfo, components: ["AlbumAutoList"] },
   AutoAlbum: { schema: S.AutoAlbum, components: ["AlbumAuto"] },
+  AutoAlbumEdit: { schema: S.AutoAlbumEdit, components: ["AlbumAutoEdit"] },
   PhotoSimple: { schema: S.PhotoSimple, components: ["PhotoSimple"] },
   ThingAlbumInfo: { schema: S.ThingAlbumInfo, components: ["AlbumThingList"] },
   PlaceAlbumInfo: { schema: S.PlaceAlbumInfo, components: ["AlbumPlaceList"] },
@@ -80,6 +85,13 @@ export const CONTRACT_MAP: Readonly<Record<string, ContractEntry>> = {
   JobStartedResponse: { schema: S.JobStartedResponse, components: ["JobStartedResponse"] },
   JobTriggerResponse: { schema: S.JobTriggerResponse, components: ["JobStartedResponse"] },
   CaptionsJobStartedResponse: { schema: S.CaptionsJobStartedResponse, components: ["CaptionsJobStartedResponse"] },
+  WriteMetadataStarted: { schema: S.WriteMetadataStarted, components: ["WriteMetadataStarted"] },
+  WriteMetadataPreview: { schema: S.WriteMetadataPreview, components: ["WriteMetadataPreview"] },
+  WriteTypeCount: { schema: S.WriteTypeCount, components: ["WriteTypeCount"] },
+  UpgradeTask: { schema: S.UpgradeTask, components: ["UpgradeTask"] },
+  UpgradeTaskList: { schema: S.UpgradeTaskList, components: ["UpgradeTaskList"] },
+  RescanPhotosResponse: { schema: S.RescanPhotosResponse, components: ["RescanPhotosResponse"] },
+  ScanFilesResponse: { schema: S.ScanFilesResponse, components: ["ScanFilesResponse"] },
   // photo edits
   RotatePhotoResponse: { schema: S.RotatePhotoResponse, components: ["RotatePhotoResponse"] },
   BulkPhotoMutationResponse: { schema: S.BulkPhotoMutationResponse, components: ["BulkPhotoMutationResponse"] },
@@ -101,6 +113,7 @@ export const CONTRACT_MAP: Readonly<Record<string, ContractEntry>> = {
   SiteSettings: { schema: S.SiteSettings, components: ["SiteSettings"] },
   SiteFeatures: { schema: S.SiteFeatures, components: ["SiteFeatures"] },
   SiteModelDownload: { schema: S.SiteModelDownload, components: ["SiteModelDownload"] },
+  SiteAutoScanStatus: { schema: S.SiteAutoScanStatus, components: ["SiteAutoScanStatus"] },
   TrashRetentionPreview: { schema: S.TrashRetentionPreview, components: ["TrashRetentionPreview"] },
   // search
   MetadataValue: { schema: S.MetadataValue, components: ["MetadataValue"] },
@@ -112,6 +125,14 @@ export const CONTRACT_MAP: Readonly<Record<string, ContractEntry>> = {
   PlaceCount: { schema: S.PlaceCount, components: ["PlaceCount"] },
   LocationSummaryResponse: { schema: S.LocationSummaryResponse, components: ["LocationSummaryResponse"] },
   LocatedPhoto: { schema: S.LocatedPhoto, components: ["LocatedPhoto"] },
+  // moving photos (#352)
+  MoveClash: { schema: S.MoveClash, components: ["MoveClash"] },
+  RefusedCount: { schema: S.RefusedCount, components: ["RefusedCount"] },
+  MovePreviewResponse: { schema: S.MovePreviewResponse, components: ["MovePreviewResponse"] },
+  MovePhotosResponse: { schema: S.MovePhotosResponse, components: ["MovePhotosResponse"] },
+  MovePhotosStartedResponse: { schema: S.MovePhotosStartedResponse, components: ["MovePhotosStartedResponse"] },
+  LibraryFolder: { schema: S.LibraryFolder, components: ["LibraryFolder"] },
+  LibraryFolderListing: { schema: S.LibraryFolderListing, components: ["LibraryFolderListing"] },
   // mutations
   PhotoEditResponse: { schema: S.PhotoEditResponse, components: ["PhotoEdit"] },
   CreateUserAlbumResponse: { schema: S.CreateUserAlbumResponse, components: ["AlbumUserEdit"] },
@@ -212,6 +233,7 @@ export const UNMAPPED: Readonly<Record<string, string>> = {
   PhotoStackSummary:
     "nested in PhotoSummary.stacks, which the schema leaves untyped (PhotoSummarySerializer.get_stacks returns a bare list or dict)",
   LoginPost: "a request body",
+  StartupStatus: "the 503 the startup placeholder answers while the database updates (#2310), not a Django view",
   LoginResponse: "simplejwt's TokenObtainPairView declares no response serializer",
   RefreshPost: "a request body",
   TokenClaims: "the JWT payload, not a response body",

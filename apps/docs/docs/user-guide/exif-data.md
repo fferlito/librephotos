@@ -51,12 +51,12 @@ Where a field lists several tags, the first one the photo has is used.
 
 | In LibrePhotos | Tags, best first | Notes |
 | --- | --- | --- |
-| Date and time | `XMP:DateCreated`, `EXIF:DateTimeOriginal`, `EXIF:ModifyDate`, `QuickTime:CreationDate`, `QuickTime:CreateDate`, `Matroska:DateTimeOriginal`, `Composite:GPSDateTime`, then the file name | Decided by your [date rules](./settings/date-rules.md), in the order of your list; this is the default order. A date you set by hand wins over every rule. `QuickTime:CreationDate` is the local time a phone recorded a video at; `QuickTime:CreateDate` (MP4, MOV), `Matroska:DateTimeOriginal` (MKV, WebM) and `Composite:GPSDateTime` are UTC and are converted with the time zone of the photo's position, or else your default time zone. `XMP:DateCreated` is where LibrePhotos writes dates. Accounts created before 1.1.0 do not have its rule unless they add it with **Add Rule** or **Reset To Defaults**. |
-| Location | `Composite:GPSLatitude`, `Composite:GPSLongitude` | ExifTool builds them from the EXIF GPS block, the embedded XMP or a video's `GPSCoordinates`. The place name (city, country) is looked up from the position. |
+| Date and time | `XMP:DateCreated`, `EXIF:DateTimeOriginal`, `EXIF:ModifyDate`, `QuickTime:CreationDate`, `QuickTime:CreateDate`, `Matroska:DateTimeOriginal`, `Composite:GPSDateTime`, then the file name | Decided by your [date rules](./settings/date-rules.md), in the order of your list; this is the default order. A date you set by hand wins over every rule. `QuickTime:CreationDate` is the local time a phone recorded a video at; `QuickTime:CreateDate` (MP4, MOV), `Matroska:DateTimeOriginal` (MKV, WebM) and `Composite:GPSDateTime` are UTC and are converted with the time zone of the photo's position, or else your default time zone. `XMP:DateCreated` is where LibrePhotos writes dates. Accounts created before 1.1.0 do not have its rule unless they add it with **Add Rule** or **Reset To Defaults**. <Since version="1.4.0" /> Between the tags and the file name, a [Google Takeout JSON](./google-takeout.md) next to the file gives the date. |
+| Location | `Composite:GPSLatitude`, `Composite:GPSLongitude` | ExifTool builds them from the EXIF GPS block, the embedded XMP or a video's `GPSCoordinates`. The place name (city, country) is looked up from the position. <Since version="1.4.0" /> A file without a position takes the one in its [Google Takeout JSON](./google-takeout.md), if it has one. |
 | Altitude | `Composite:GPSAltitude` | In metres, negative below sea level, stored in the photo's metadata. |
 | Rating, favorite | `Rating` | Without a group ExifTool answers with `XMP-xmp:Rating` or the EXIF `Rating`. A photo rated at least **Minimum image rating to interpret as favorite** is a favorite. |
 | Tags | `XMP:Subject`, `IPTC:Keywords`, `XMP:PersonInImage`, `XMP:HierarchicalSubject` | All four are merged, and each keyword becomes a tag with a small file icon. Of a hierarchical keyword (Lightroom, digiKam, darktable) the last level counts: `Places\|USA\|San Francisco` adds `San Francisco`. The `XMP-iptcExt:PersonInImage` names become tags, not people: people come from face regions. |
-| Caption | `XMP:Description`, `XMP:Description-*`, `IPTC:Caption-Abstract`, `EXIF:ImageDescription` | The description's default-language entry first, else any language entry, then the IPTC caption (older Photoshop and Lightroom, Picasa, newsroom tools), then the EXIF one. Text cameras put there, such as `OLYMPUS DIGITAL CAMERA` or `SONY DSC`, and a description that only repeats the camera model are skipped. |
+| Caption | `XMP:Description`, `XMP:Description-*`, `IPTC:Caption-Abstract`, `EXIF:ImageDescription` | The description's default-language entry first, else any language entry, then the IPTC caption (older Photoshop and Lightroom, Picasa, newsroom tools), then the EXIF one. Text cameras put there, such as `OLYMPUS DIGITAL CAMERA` or `SONY DSC`, and a description that only repeats the camera model are skipped. <Since version="1.4.0" /> Without any of them, the `description` of a [Google Takeout JSON](./google-takeout.md) next to the file. |
 | Title | `XMP:Title`, `XMP:Headline`, `IPTC:ObjectName` | Stored in the photo's metadata (`/api/photos/{id}/metadata/`). |
 | Creator | `XMP:Creator`, `IPTC:By-line`, `EXIF:Artist` | The first name when there are several. Stored in the photo's metadata. |
 | Copyright | `XMP:Rights`, `IPTC:CopyrightNotice`, `EXIF:Copyright` | Stored in the photo's metadata. |
@@ -259,17 +259,54 @@ never changed.
 
 ### Writing the edits of a whole library
 
-`python manage.py save_metadata` writes the ratings (`--types ratings`, the default) or the face
-regions (`--types face_tags`) of every photo again, for example after turning write-back on for an
-existing library. Each photo is written where its owner's **Write edits to files** says, and photos
-of users who have it `Off` are skipped. `--sidecar` or `--media-file` overrides the setting for the
-one user named with `--user`; `--dry-run` only shows what would be written. `POST /api/savemetadata/`
-does the same for your own photos.
+<Since version="1.4.0" /> `Write edits to files` writes an edit when you make it. The edits you made
+before turning it on are only in LibrePhotos; **Write now** under the setting (Settings → Metadata
+Options, see [Settings](./settings/index.md#metadata-options)) writes them as a **Write Metadata to
+Files** job, with the same writes a live edit makes. Only a value that says something is written:
+
+| Kind (`types`) | Photos it writes |
+| --- | --- |
+| `ratings` | Rated 1 to 5 stars; a rating of 0 is not written. |
+| `dates` | A date you set by hand. |
+| `rotations` | Turned in LibrePhotos. |
+| `captions` | A caption you wrote; a generated caption is never written. |
+| `locations` | A position you set; a position read from the file is already there. |
+| `keywords` | With tags: each tag is added to the keywords. |
+| `face_tags` | With faces that are not deleted, named or not. Only with **Write face tags to image files** on. |
+
+A photo with none of them is not touched, so an unrated library does not get a sidecar per photo. The
+job writes in batches of 200 photos, each through one ExifTool process; it shows its progress in the job
+list, can be cancelled there, and ends with how many photos it wrote (`written`), left alone (`skipped`:
+a local copy of a Nextcloud photo, or the setting changed while it ran) and could not write (`errors`,
+the first 100 listed with the file and ExifTool's reason). A write it makes is LibrePhotos' own, so
+the next scan does not read those photos again for it (see
+[How a rescan treats your edits](#how-a-rescan-treats-your-edits)).
+
+`GET /api/savemetadata/` says what it would write now (the target and a count per kind), and
+`POST /api/savemetadata/` starts the job: `{"types": [...]}` picks kinds, and leaving it out writes
+everything your settings write. It answers 202 with the `job_id`, 400 while `Write edits to files` is
+`Off` or for a kind it does not know, and 409 while the job runs. Up to 1.3.0 it wrote the ratings of
+every photo, 0 included, inside the request.
+
+`python manage.py save_metadata` makes the same writes for every user whose `Write edits to files` is
+on (photos of users who have it `Off` are skipped), with the kinds each user's settings write.
+`--types` limits the kinds, `--user` limits it to one user, `--sidecar` or `--media-file` overrides
+the setting for that one user, and `--dry-run` only counts.
 
 ## How a rescan treats your edits
 
 A **Rescan** reads every file again, and a scan reads a file again when it or its sidecar changed.
-What it does to a value you edited in LibrePhotos:
+
+<Since version="1.4.0" /> A write LibrePhotos makes itself is not such a change. A scan remembers the
+modification time of every file it reads and of its sidecars, and a write that ExifTool reports as
+done updates what was remembered, so rating or re-dating a thousand photos does not make the next
+scan read them all again. In media file mode the write still moves the file's modification time,
+so backup and sync tools see that the file changed. A change another app makes is still picked up:
+a file it edited, a sidecar it added or one that was deleted, before or after LibrePhotos' write.
+A photo indexed by an earlier version gets its times remembered on the first scan that reads it or
+finds it unchanged; until then, a write makes the next scan read the photo once more, as before.
+
+What a scan does to a value you edited in LibrePhotos:
 
 | Field | On a rescan |
 | --- | --- |
@@ -309,8 +346,8 @@ A write ExifTool cannot make, for example into a read-only library, a damaged fi
 that cannot hold the tag, never undoes your edit: the rating, date, caption, location, tags, face
 label or rotation stays in LibrePhotos. The backend log names the photo and ExifTool's reason.
 Labelling a face, drawing one and rotating a photo also return the reason as `write_error` in the
-API response, and `POST /api/savemetadata/` and `manage.py save_metadata` count the photos they
-could not write as errors.
+API response, and the **Write Metadata to Files** job and `manage.py save_metadata` list the photos
+they could not write.
 
 In the web app, a face label, a drawn face or a rotation that did not reach the file shows an
 orange **Not written to the file** notice next to the usual confirmation: "Saved in LibrePhotos,

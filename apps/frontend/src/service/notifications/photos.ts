@@ -112,6 +112,30 @@ function dateRulesFailed() {
   toast.error(i18n.t("toasts.daterulesfailed"), { title: i18n.t("toasts.daterulesfailedtitle") });
 }
 
+/** "Write metadata to files" (#2287) queued its job. */
+function writeMetadataStarted() {
+  toast.success(i18n.t("toasts.writemetadatastarted"), { title: i18n.t("toasts.writemetadatastartedtitle") });
+}
+
+/**
+ * The "Write metadata to files" job went through every photo: how many it wrote. Photos it could
+ * not write make it a warning that stays until closed.
+ */
+function writeMetadataDone(written: number, failed: number) {
+  const message = i18n.t("toasts.writemetadatawritten", { count: written });
+  if (failed) {
+    const unwritten = i18n.t("toasts.writemetadataunwritten", { count: failed });
+    toast.warning(`${message} ${unwritten}`, { title: i18n.t("toasts.writemetadatadonetitle"), autoClose: false });
+    return;
+  }
+  toast.success(message, { title: i18n.t("toasts.writemetadatadonetitle") });
+}
+
+/** The "Write metadata to files" job failed: too many files could not be written, or it could not start. */
+function writeMetadataFailed() {
+  toast.error(i18n.t("toasts.writemetadatafailed"), { title: i18n.t("toasts.writemetadatafailedtitle") });
+}
+
 function togglePhotosHidden(numberOfPhotos: number, isHidden: boolean) {
   const notificationMessage = isHidden
     ? i18n.t("toasts.hidephoto", { numberOfPhotos })
@@ -137,6 +161,16 @@ function startPhotoScan() {
 
 function startFullPhotoScan() {
   toast.success(i18n.t("toasts.fullscanphotos"), { title: i18n.t("toasts.fullscanphotostitle") });
+}
+
+/** A rescan of chosen photos started (#2214): what it reads again, and what it keeps. */
+function rescanPhotosStarted(count: number) {
+  toast.success(i18n.t("toasts.rescanphotos"), { title: i18n.t("toasts.rescanphotostitle", { count }) });
+}
+
+/** A rescan of chosen photos did not start; `message` says why (the server's words). */
+function rescanPhotosFailed(message: string) {
+  toast.error(message, { title: i18n.t("toasts.rescanphotosfailedtitle") });
 }
 
 function startOcrScan() {
@@ -248,6 +282,8 @@ export const photos = {
   photosDateChanged,
   photosLocationSet,
   removePhotos,
+  rescanPhotosFailed,
+  rescanPhotosStarted,
   savePhotoCaptions,
   scanDirectoryRequired,
   setPhotosCategory,
@@ -268,4 +304,7 @@ export const photos = {
   trashEmptiedWithErrors,
   trashEmptyFailed,
   updatePhoto,
+  writeMetadataDone,
+  writeMetadataFailed,
+  writeMetadataStarted,
 };

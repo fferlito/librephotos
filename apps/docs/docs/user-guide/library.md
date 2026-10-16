@@ -30,7 +30,7 @@ In the **Scan Library** row, click **Scan** to scan your configured scan directo
 7. Performs reverse geocoding
 8. Calculates the search embeddings the thing detection could not
 
-The scan imports images, videos, RAW files and XMP sidecars. Any other file in your folders, such as an editor sidecar (`.pp3`, `.aae`), a Google Takeout `.json` or `Thumbs.db`, is skipped and does not count as an error. A file that looks like a photo or video but cannot be read, such as an empty `.jpg` or one whose header is damaged, is still listed in the scan job's errors (see [Job System](./job-system.md)).
+The scan imports images, videos, RAW files and XMP sidecars. Any other file in your folders, such as an editor sidecar (`.pp3`, `.aae`) or `Thumbs.db`, is skipped and does not count as an error. The `.json` files of a Google Takeout export are read for the date, location and description of their photo and are not photos themselves (see [Importing a Google Takeout export](./google-takeout.md)). <Since version="1.4.0" /> Up to 1.3.0 they were skipped too. A file that looks like a photo or video but cannot be read, such as an empty `.jpg` or one whose header is damaged, is still listed in the scan job's errors (see [Job System](./job-system.md)).
 
 A **Scan** processes new and changed files, and also every photo whose metadata could not be read last time (for example because the exif service was restarting or timed out): such a photo is listed in the job's errors, and the next scan reads it again, even though the file has not changed. _Not released yet:_ before this, only a **Rescan** read those photos again; after the update, the first **Scan** also reads the photos earlier scans left without metadata.
 
@@ -56,9 +56,48 @@ For a video, and for a photo you have rotated inside LibrePhotos, the two cannot
 The first scan after upgrading may re-key files LibrePhotos had previously written metadata into. That is bookkeeping with no visible change to your library, and it happens only once per file.
 :::
 
+### Rescan some photos
+
+<Since version="1.4.0" />
+
+When one photo is wrong (a bad thumbnail, a date that does not match the file after another app edited it, a file replaced with one that kept the old modification time), you can read just its files again instead of rescanning the whole library:
+
+- **Several photos**: select them, open the **⋮** (Photo Actions) and choose **Rescan files** in the **Files** group. Up to 1,000 photos at a time; after **Select all**, pick the photos one by one instead.
+- **One photo**: in the photo viewer, open the **⋮** after the rotate buttons (on a phone, the **⋮** menu) and choose **Rescan file**. On the photo's page it is under **More**.
+
+A rescan reads every file of the photo again, also when it did not change: the main file, its [variants](./stacks-and-file-variants.md) and its sidecars. It renders the thumbnails again (the old ones stay if that fails), reads the metadata and the date, and checks the file's hash. What you changed in LibrePhotos stays: a date you set by hand, a location you set, captions and albums (see [How a rescan treats your edits](./exif-data.md#how-a-rescan-treats-your-edits) for every field). The things, places and faces jobs that follow only look at what is new, as after a **Scan**, so a rescan does not detect faces again: use **Detect faces again** next to it for that (see [Face recognition](./face-recognition.md#detect-faces-again-in-some-photos-or-a-folder)).
+
+The items are only shown for your own photos, not for photos someone shared with you. Like every job, a rescan waits while another job runs. It is never what the next **Scan** compares the library against, so a file changed elsewhere in the library is still picked up then.
+
 ### Scan Progress
 
 Scan progress is shown in the [Job System](./job-system.md). The scan is split into smaller tasks, prioritizing thumbnail creation so photos appear in the UI quickly while heavier processing (faces, things) happens in the background.
+
+## Moving photos to another folder
+
+<Since version="1.4.0" />
+
+You can move your own photos to another folder of your library without leaving LibrePhotos. Select the photos and choose **Move to folder…** in the photo actions menu (⋮), or open a photo and choose **More → Move to folder…**.
+
+The dialog shows the folders of your library: your scan directory and, when it is set elsewhere, your upload folder. Folders the scan skips (hidden folders and the ones matching the skip patterns) are not listed, and you cannot move photos outside your library. Pick a folder in the tree or type its full path. **New folder** names a folder inside the one you picked; it is made when the photos move.
+
+Before you move, the dialog says how many photos and files move and which photos stay where they are:
+
+- photos already in that folder;
+- local copies of Nextcloud files, which the next Nextcloud scan would download again to the old place;
+- photos that share a file with another photo;
+- photos whose files are missing on disk.
+
+A photo moves with all its files: the main file, its RAW or JPEG variant, a Live Photo's video and its XMP sidecars (both `IMG_1.xmp` and `IMG_1.jpg.xmp`). It moves completely or not at all: if one file cannot be moved, the others are put back. A Motion Photo video that LibrePhotos extracted into its own data folder stays there.
+
+If a file with the same name is already in the folder, a second dialog lists the names and lets you choose:
+
+- **Rename, keep both**: the moved photo gets a free name, such as `IMG_1 (1).jpg`, for all its files, so they still belong together.
+- **Skip**: those photos stay where they are.
+
+A file in the folder is never overwritten.
+
+Albums, faces, tags, ratings and sharing stay with the photo, and the folder views show it in its new folder right away. The next scan does not read a moved photo again. A selection of more than 100 photos moves in the background as a **Move Photos** job (see [Job System](./job-system.md)); a move cannot start while a scan of your library runs.
 
 ## Nextcloud Integration
 
@@ -145,7 +184,7 @@ The Library page provides quick access to common maintenance actions:
 | **Generate Event Albums** | **Generate** | Group photos into events by when they were taken |
 | **Regenerate Event Titles** | **Generate** | Regenerate the titles of existing events |
 | **Train faces** | **Train** | Run face clustering and classification |
-| **Rescan Faces** | **Rescan** | Re-detect faces in all photos |
+| **Rescan Faces** | **Rescan** | Re-detect faces in all photos; for some photos or one folder see [Detect faces again](./face-recognition.md#detect-faces-again-in-some-photos-or-a-folder) |
 | **Nextcloud** | **Scan** | Scan photos from a connected Nextcloud instance |
 | **Extract Text** | **Extract** | Read the text on photos that have not been read yet (see [Text Recognition](./text-recognition.md#extracting-text)) |
 | **Extract Text** (dropdown) | **Extract text again for all photos** | Read the text on every photo again |
@@ -222,9 +261,11 @@ python manage.py scan -n
 # Build similarity index for all users
 python manage.py build_similarity_index
 
-# Save metadata to XMP sidecars or image files, as each owner's "Synchronize
-# metadata to disk" setting says (users with it Off are skipped; --sidecar or
-# --media-file overrides it for the one user named with --user)
+# Write the edits already in LibrePhotos to XMP sidecars or image files, as each
+# owner's "Write edits to files" setting says (users with it Off are skipped;
+# --sidecar or --media-file overrides it for the one user named with --user;
+# --types limits what is written, --dry-run only counts). The same writes as
+# Settings > Metadata Options > Write now.
 python manage.py save_metadata
 
 # Start all ML services (individual services are managed from the Admin Area)
@@ -247,6 +288,10 @@ python manage.py strip_thumbnail_metadata
 # wrongly ("0" for anything faster than about 1/2000 s, "1/1000" for 1/1250 to
 # 1/2000 s, "5/2" for 2.5 s); only that tag is read (--dry-run only counts)
 python manage.py refresh_exposure_time
+
+# Queue the automatic tasks an update left (the Admin Area's Finish the
+# upgrade card), each once; the Docker image and the Windows app run it at start
+python manage.py start_upgrade_tasks
 
 # Create a new user (username and email are required; the password is
 # autogenerated unless --password is given, and --admin grants admin rights)

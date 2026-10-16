@@ -155,7 +155,7 @@
     "scanoptions": "Scanning Options",
     "sceneconfidence": "Scene confidence",
     "confidencelevel": "Confidence level",
-    "confidencepercentage": "Confidence: {{percentage}}%",
+    "confidencepercent": "Confidence: {{percent}}",
     "confidence": {
       "high": "High",
       "standard": "Standard",
@@ -206,6 +206,46 @@
         "tags": "tags",
         "location": "locations"
       }
+    },
+    "writeexisting": {
+      "title": "Write existing edits to files",
+      "sidecar_one": "Edits you made before turning this on are only in LibrePhotos. This writes the {{fields}} of {{count}} photo to its .xmp file.",
+      "sidecar_other": "Edits you made before turning this on are only in LibrePhotos. This writes the {{fields}} of {{count}} photos to their .xmp files.",
+      "mediafile_one": "Edits you made before turning this on are only in LibrePhotos. This writes the {{fields}} of {{count}} photo into the photo file itself.",
+      "mediafile_other": "Edits you made before turning this on are only in LibrePhotos. This writes the {{fields}} of {{count}} photos into the photo files themselves.",
+      "nothing": "Your photos have no edits to write: no ratings, dates, rotations, captions, tags or locations set in LibrePhotos.",
+      "off": "Turn on Save to sidecar or Save to media file above first.",
+      "unsaved": "Save your changes first; this writes with the saved setting.",
+      "button": "Write now",
+      "running": "Writing: {{current}} of {{target}} photos",
+      "types": {
+        "ratings": "ratings",
+        "dates": "dates",
+        "rotations": "rotations",
+        "captions": "captions",
+        "locations": "locations",
+        "keywords": "tags",
+        "face_tags": "face tags"
+      },
+      "typecounts": {
+        "ratings": "Ratings",
+        "dates": "Dates you set",
+        "rotations": "Rotations",
+        "captions": "Captions",
+        "locations": "Locations you set",
+        "keywords": "Tags, as keywords",
+        "face_tags": "Face tags"
+      },
+      "photos_one": "{{count}} photo",
+      "photos_other": "{{count}} photos",
+      "sidecartitle_one": "Write to {{count}} sidecar file?",
+      "sidecartitle_other": "Write to {{count}} sidecar files?",
+      "sidecarmessage": "LibrePhotos writes these into an .xmp file next to each photo, such as IMG_2041.jpg.xmp. The photos themselves are not changed.",
+      "sidecarconfirm": "Write to files",
+      "mediafiletitle_one": "Change {{count}} original file?",
+      "mediafiletitle_other": "Change {{count}} original files?",
+      "mediafilemessage": "LibrePhotos writes these into the photo files themselves. Keep a backup of your originals.",
+      "mediafileconfirm": "Write into originals"
     },
     "favoriteupdate": "Update",
     "savechanges": "Save changes?",
@@ -332,6 +372,8 @@
   "modalalbumcover": {
     "title": "Choose Album Cover",
     "menuitem": "Set as cover…",
+    "automatic": "Automatic",
+    "automatichint": "First photo",
     "selectphoto": "Select a photo to use as the cover for {{album}}",
     "nophotos": "No photos available in this album",
     "tip": "Tip: You can also select a single photo in the album and click \"Set album cover\" from the menu.",
@@ -392,7 +434,9 @@
     "adminarea": "Admin Area",
     "jobs": "My Jobs",
     "accountmenu": "Account menu",
-    "workerstatusbusy": "Worker status: busy"
+    "workerstatusbusy": "Worker status: busy",
+    "upgradetasks_one": "{{count}} upgrade task left",
+    "upgradetasks_other": "{{count}} upgrade tasks left"
   },
   "jobs": {
     "header": "My Jobs",
@@ -422,7 +466,11 @@
       "empty_trash": "Empty Trash",
       "generate_captions": "Generate Captions",
       "reapply_date_rules": "Apply Date Rules",
-      "unknown": "Other job ({{name}})"
+      "write_metadata": "Write Metadata to Files",
+      "refresh_exposure_times": "Read Shutter Speeds Again",
+      "look_up_places": "Look Up Place Names",
+      "unknown": "Other job ({{name}})",
+      "move_photos": "Move Photos"
     },
     "queuebusy": {
       "reason": "A job is running. Start this one when it has finished.",
@@ -588,6 +636,7 @@
     "noPublicAlbums": "No albums have been made public via link",
     "noPublicPhotos": "No photos have been made public",
     "publicPhotos": "Public Photos",
+    "publicPhoto": "Public photo",
     "shareTimestamps": "Share photo timestamps",
     "shareTimestampsDesc": "Show when photos were taken",
     "shareLocation": "Share location information",
@@ -624,18 +673,21 @@
     "revokeLinkConfirm": "The link stops working right away and cannot be restored."
   },
   "selectionbar": {
-    "selected": "selected",
     "toggle": "Toggle select mode",
     "deselect": "Deselect all",
     "select": "Select all",
     "selectloaded": "Select the loaded photos",
-    "selectedoftotal": "{{selected}} of {{total}} selected",
+    "selectedoftotal": "{{selected, number}} of {{total, number}} selected",
     "selectmode": "Select",
     "selectphotos": "Select photos",
     "done": "Done selecting",
     "toolbar": "Selection",
-    "all": "All",
-    "excluded": "excluded"
+    "count_one": "{{count, number}} selected",
+    "count_other": "{{count, number}} selected",
+    "allcount_one": "All {{count, number}} selected",
+    "allcount_other": "All {{count, number}} selected",
+    "allexcluded_one": "All {{total, number}} selected ({{count, number}} excluded)",
+    "allexcluded_other": "All {{total, number}} selected ({{count, number}} excluded)"
   },
   "defaultheader": {
     "welcome": "Welcome to LibrePhotos",
@@ -643,16 +695,16 @@
     "gettingstarted": "Set Up Library",
     "loading": "Loading...",
     "noimages": "No images found",
-    "days": "days",
-    "photos": "photos",
-    "days_one": "day",
-    "photos_one": "photo",
-    "videos": "videos",
-    "videos_one": "video"
+    "dayscount_one": "{{count, number}} day",
+    "dayscount_other": "{{count, number}} days",
+    "photoscount_one": "{{count, number}} photo",
+    "photoscount_other": "{{count, number}} photos",
+    "videoscount_one": "{{count, number}} video",
+    "videoscount_other": "{{count, number}} videos"
   },
   "selectionactions": {
     "photoactions": "Photo Actions",
-    "selected": "selected",
+    "labelwithselection": "{{label}}: {{selection}}",
     "favorite": "Favorite",
     "unfavorite": "Unfavorite",
     "setrating": "Set rating",
@@ -703,7 +755,26 @@
     "createstacktwophotos": "Select at least two photos to stack them",
     "stacksselectall": "Not available with Select all: select the photos one by one",
     "nomanualstack": "None of the selected photos is in a manual stack",
-    "setlocation": "Set location…"
+    "setlocation": "Set location…",
+    "movetofolder": "Move to folder…"
+  },
+  "fileactions": {
+    "files": "Files",
+    "rescanfiles": "Rescan files",
+    "rescanfile": "Rescan file",
+    "rescannote": "Read the files again: thumbnails, date, metadata",
+    "detectfaces": "Detect faces again",
+    "selectall": "Not available with Select all: select at most 1,000 photos one by one. For the whole library, use Rescan on the Library page.",
+    "toomany": "Select at most 1,000 photos. For the whole library, use Rescan on the Library page."
+  },
+  "folderactions": {
+    "label": "Folder actions",
+    "detectfaces": "Detect faces again in this folder",
+    "detectfacesnote": "This folder and its subfolders",
+    "detectfacestitle": "Detect faces again in {{folder}}?",
+    "detectfacesmessage_one": "Looks for faces in the {{count}} photo of this folder and its subfolders again. Faces already found and named stay as they are. Faces you deleted are not found again: restore them from the Deleted tab of the face dashboard.",
+    "detectfacesmessage_other": "Looks for faces in the {{count}} photos of this folder and its subfolders again. Faces already found and named stay as they are. Faces you deleted are not found again: restore them from the Deleted tab of the face dashboard.",
+    "detectfacesconfirm": "Detect faces"
   },
   "changedatetime": {
     "title_one": "Change date and time of {{count}} photo",
@@ -820,6 +891,19 @@
       "whoisit": "Who is in the box you drew?",
       "nofaces": "No faces were found in this photo. If there is one, you can add it yourself.",
       "rotated": "Turn the photo back upright to add a face"
+    },
+    "unsaved": {
+      "badge": "Unsaved",
+      "title": "Discard unsaved changes?",
+      "message": "Your changes to the {{fields}} of this photo are not saved yet.",
+      "keep": "Keep editing",
+      "discard": "Discard",
+      "fields": {
+        "date": "date",
+        "caption": "caption",
+        "tags": "tags",
+        "location": "location"
+      }
     },
     "controls": {
       "fullscreen": "Fullscreen (G)",
@@ -1178,7 +1262,6 @@
       "token_not_valid": "Login expired. Please log in again.",
       "token": "Token issue"
     },
-    "errorbackend": "No connection to backend server, try again in a few minutes.",
     "errorpassword": "Password may not be blank!",
     "errorusername": "Username may not be blank!",
     "errorusernameexists": "A user with that username already exists.",
@@ -1378,6 +1461,11 @@
     "download": "Download",
     "downloadserverstats": "Download Server Stats",
     "stripthumbnailmetadata": "Remove photo details from old thumbnails",
+    "lookupplaces": "Look up place names again",
+    "lookupplacesexplanation": "Asks the Map Provider set in Site Settings for the place of every photo with a location, for example after switching to ExifTool. Changing the provider alone renames nothing.",
+    "lookupplacesconfirmtitle": "Look up the place names of every photo again?",
+    "lookupplacesconfirm": "Every user's photos get the names the current Map Provider gives. Places albums under the old names end up empty, favourited or shared ones included, and the day albums name their places again as the job reaches them. With an online provider this takes about a second per photo, so hours for a large library; with ExifTool it takes minutes.",
+    "lookupplacesconfirmbutton": "Look up",
     "stripthumbnailmetadataexplanation": "Thumbnails made by LibrePhotos 1.2.1 or older still contain details from the original photo, such as where it was taken. This removes them. Your photos are not changed.",
     "start": "Start",
     "jobrunning": "Running",
@@ -1442,7 +1530,6 @@
     },
     "removejob": {
       "title": "Remove this job?",
-      "scanbaseline": "A normal scan only rereads files changed since the newest successful library scan. If this is that scan, the next one rereads every file changed since the scan before it, or your whole library if none is left.",
       "photobaseline": "{{job}} only covers photos added since its newest successful run. If this is that run, the next one redoes every photo added since the run before it, or all your photos if none is left.",
       "unfinished": "Removing the entry does not stop the job; only its record is deleted. Use Cancel to stop it.",
       "plain": "The job's record and result are deleted. Nothing in your library changes.",
@@ -1479,9 +1566,12 @@
     "faileditems": "Failed items",
     "removeexplanation": "Removing an entry does not actually stop the job - it's only removed from the DB. Use only in cases when you know that a job failed ungracefully, by inspecting the logs, etc.",
     "removeentries": "Removing entries",
+    "scanbaseline": "This scan is the reference for the next incremental scan. It can be removed once a newer scan of the whole library has finished.",
     "cancel": "Cancel",
-    "itemsprocessed_one": "{{count}} item processed",
-    "itemsprocessed_other": "{{count}} items processed",
+    "itemsprocessed_one": "{{count, number}} item processed",
+    "itemsprocessed_other": "{{count, number}} items processed",
+    "itemsprocessedpercent_one": "{{count, number}} item processed ({{percent}})",
+    "itemsprocessedpercent_other": "{{count, number}} items processed ({{percent}})",
     "cancelled": "Cancelled",
     "completed": "Completed",
     "actions": "Actions",
@@ -1530,6 +1620,25 @@
     "autocreateuserdirectory": "New users get their own folder under the data root as their scan directory. Your own scan directory must be a subfolder, not the data root itself, because scan directories of different users cannot overlap.",
     "headerscanmissingmaxfraction": "Missing photos limit",
     "scanmissingmaxfraction": "A scan changes nothing and asks whether the library is mounted when more than this share of a user's photos, and more than 100 photos, would be marked missing. 100% turns the check off.",
+    "autoscanheader": "Scan libraries automatically",
+    "autoscandescription": "Scans every library for new and changed files, like the Scan button on the Library page, Nextcloud folders included while that integration is on. A user whose scan is still running is skipped, so scans never pile up.",
+    "autoscantimezone": "The time is in the server's time zone, {{zone}}.",
+    "autoscan_off": "Off",
+    "autoscan_hourly": "Every hour",
+    "autoscan_daily": "Every day",
+    "autoscan_custom": "Custom",
+    "autoscanat": "at",
+    "autoscantime": "Start time",
+    "autoscandays": "Days",
+    "autoscanpickaday": "Pick at least one day. Until you do, the saved schedule stays.",
+    "autoscanstatusnever": "No run yet.",
+    "autoscanstatusnolibrary": "Last run {{when}}: no user has a library to scan.",
+    "autoscanstatusscanned_one": "Last run {{when}}: {{count}} library scanned.",
+    "autoscanstatusscanned_other": "Last run {{when}}: {{count}} libraries scanned.",
+    "autoscanstatusrunning": "Still scanning: {{names}}.",
+    "autoscanstatusskipped": "Skipped {{names}}: a scan was still running.",
+    "autoscanstatusfailed": "Could not scan {{names}}; see Worker Logs.",
+    "autoscanstatusnext": "Next run {{when}}.",
     "headertrashretention": "Delete photos from the trash after",
     "trashretention": "Days a photo stays in a user's trash before it is deleted for good. 0 keeps photos in the trash until the user empties it.",
     "trashretentionunit": "days",
@@ -1550,7 +1659,7 @@
     "headerskippatterns": "Skip patterns",
     "skippatterns": " Comma delimited list of patterns to ignore (e.g. '@eaDir,#recycle' for Synology devices)",
     "map_api_provider_header": "Map Provider",
-    "map_api_provider_description": "For getting location names from image GPS metadata.",
+    "map_api_provider_description": "Turns the GPS position of a photo into a place name. ExifTool works offline and names the nearest town; online providers can name streets, but receive your photos' coordinates. Switching renames nothing already named: run Look up place names again in Admin Tools afterwards.",
     "map_api_key_header": "API key for Map Provider",
     "map_api_key_description": "Get your API key at {{url}}",
     "map_tile_provider_header": "Map Tiles",
@@ -1572,6 +1681,7 @@
     "option_lightweight_default": "{{name}} (lightweight, default)",
     "option_fastest": "{{name}} (fastest)",
     "option_most_accurate": "{{name}} (most accurate)",
+    "option_offline": "{{name}} (offline, built in)",
     "maptile_none": "None (hide map)",
     "model_none": "None",
     "features_header": "Features",
@@ -1612,12 +1722,17 @@
     "explorecharts": "Explore charts"
   },
   "statistics": {
-    "title": "Statistics"
+    "title": "Statistics",
+    "photocount_one": "{{count, number}} photo",
+    "photocount_other": "{{count, number}} photos",
+    "facecount_one": "{{name}}: {{count, number}} face",
+    "facecount_other": "{{name}}: {{count, number}} faces"
   },
   "autoalbum": {
     "subtitle": "Showing {{ autoalbumlength }} events",
     "delete": "Delete event",
     "deleteexplanation": "This will delete the event. Are you sure?",
+    "eventactions": "Event actions",
     "subtitle_one": "{{count}} event",
     "subtitle_other": "{{count}} events",
     "title": {
@@ -1998,6 +2113,15 @@
     "rescanfaces": "Scanning started",
     "rescanfacestitle": "Face rescanning",
     "rescanfacesfailed": "Could not start the scan. Face detection may be turned off on this server.",
+    "detectfacestitle": "Detect faces again",
+    "detectfacesphotos_one": "Looking for faces in {{count}} photo again. Faces you deleted are not found again.",
+    "detectfacesphotos_other": "Looking for faces in {{count}} photos again. Faces you deleted are not found again.",
+    "detectfacesfolder": "Looking for faces in this folder and its subfolders again. Faces you deleted are not found again.",
+    "rescanphotostitle_one": "Rescanning {{count}} photo",
+    "rescanphotostitle_other": "Rescanning {{count}} photos",
+    "rescanphotos": "Thumbnails, dates and metadata are read from the files again. Dates you set, locations, captions and albums stay.",
+    "rescanphotosfailedtitle": "Rescan not started",
+    "rescanphotosfailed": "Could not start the rescan.",
     "renameperson": "Person {{personName}} was successfully renamed to {{newPersonName}}",
     "renamepersontitle": "Rename person",
     "deleteperson": "Person deleted",
@@ -2094,6 +2218,8 @@
     "jobalreadyrunningtitle": "Already running",
     "stripthumbnailmetadata": "Removing photo details from thumbnails. Follow it in Worker Logs.",
     "stripthumbnailmetadatatitle": "Job started",
+    "lookupplaces": "Looking up the place names of every photo again. Follow it in Worker Logs.",
+    "lookupplacestitle": "Job started",
     "emptytrashstarted_one": "{{count}} photo is being deleted in the background. Follow it in the job list.",
     "emptytrashstarted_other": "{{count}} photos are being deleted in the background. Follow it in the job list.",
     "emptytrashstartedtitle": "Emptying the trash",
@@ -2115,6 +2241,15 @@
     "daterulesappliedtitle": "Date rules applied",
     "daterulesfailed": "The date rules could not be applied. The job list has the details.",
     "daterulesfailedtitle": "Date rules not applied",
+    "writemetadatastarted": "Writing your edits to your files. Follow it in the job list; you can keep using LibrePhotos.",
+    "writemetadatastartedtitle": "Writing metadata to files",
+    "writemetadatawritten_one": "{{count}} photo written.",
+    "writemetadatawritten_other": "{{count}} photos written.",
+    "writemetadataunwritten_one": "{{count}} photo could not be written; the job list has the details.",
+    "writemetadataunwritten_other": "{{count}} photos could not be written; the job list has the details.",
+    "writemetadatadonetitle": "Metadata written to files",
+    "writemetadatafailed": "Your edits could not be written to your files. The job list has the details.",
+    "writemetadatafailedtitle": "Metadata not written",
     "taggedphotos": "Added {{tags}} to {{count}} photo(s)",
     "taggedphotostitle": "Photos tagged",
     "setcategorytitle": "Set category",
@@ -2159,7 +2294,16 @@
     "setlocationkept_one": "{{count}} photo kept its own location.",
     "setlocationkept_other": "{{count}} photos kept their own location.",
     "setlocationnone": "Nothing changed: the photos already have a location.",
-    "setlocationfailed": "The location could not be set. Please try again."
+    "setlocationfailed": "The location could not be set. Please try again.",
+    "movephotostitle": "Move to folder",
+    "movephotosstarted": "The photos are moving in the background.",
+    "photosmoved_one": "Moved {{count}} photo to {{folder}}.",
+    "photosmoved_other": "Moved {{count}} photos to {{folder}}.",
+    "photosmovedstayed_one": "{{count}} photo stayed where it was.",
+    "photosmovedstayed_other": "{{count}} photos stayed where they were.",
+    "photosmovednone_one": "Nothing moved: {{count}} photo stayed where it was.",
+    "photosmovednone_other": "Nothing moved: {{count}} photos stayed where they were.",
+    "photosmovefailed": "The photos could not be moved."
   },
   "rules": {
     "1": "Local time from DATE_TIME_ORIGINAL Exif tag",
@@ -2187,7 +2331,8 @@
       "exif": "Exif tag",
       "path": "File path",
       "filesystem": "File property",
-      "user_defined": "Set by user"
+      "user_defined": "Set by user",
+      "takeout_json": "Google Takeout JSON"
     },
     "tz_names": {
       "gps_timezonefinder": "the timezone at the GPS location",
@@ -2203,7 +2348,8 @@
   "folders": "Folders",
   "back_to_folders": "Back to Folders",
   "show_all_subfolders": "Show all subfolders",
-  "more": "more",
+  "moresubfolders_one": "+{{count, number}} more",
+  "moresubfolders_other": "+{{count, number}} more",
   "all_subfolders": "All subfolders",
   "filter_folders": "Filter by name or path...",
   "clear": "Clear",
@@ -2342,12 +2488,11 @@
       "description": "Add photos with timestamps to see your photo timeline."
     },
     "scanning": {
-      "title": "Scan in progress",
-      "processed": "items processed",
+      "titlewithjob": "Scan in progress: {{job}}",
       "refresh": "Refresh the page to see newly scanned photos.",
       "refreshButton": "Refresh",
-      "progress_one": "{{current}} / {{count}} item processed",
-      "progress_other": "{{current}} / {{count}} items processed"
+      "progress_one": "{{current, number}} / {{count, number}} item processed",
+      "progress_other": "{{current, number}} / {{count, number}} items processed"
     },
     "goToLibrary": "Go to Library",
     "goToFaces": "Go to Faces",
@@ -2825,5 +2970,163 @@
     "filemissingtitle": "The file could not be read",
     "readfailedtitle": "ExifTool could not read the file",
     "retry": "Try again"
+  },
+  "backendStatus": {
+    "updating": {
+      "title": "LibrePhotos is updating",
+      "text": "Your photos are safe. This can take a few minutes on large libraries. This page reloads by itself.",
+      "tab": "Updating · LibrePhotos"
+    },
+    "starting": {
+      "title": "LibrePhotos is starting",
+      "text": "LibrePhotos is starting its services. This usually takes a few seconds, and this page reloads by itself.",
+      "tab": "Starting · LibrePhotos"
+    },
+    "unreachable": {
+      "title": "LibrePhotos is not answering",
+      "text": "The server may be restarting. Your photos are safe. This page tries again every few seconds and reloads by itself.",
+      "tab": "Not answering · LibrePhotos",
+      "long": "Still no answer. If you run this server, check that the backend container or the Windows app is running."
+    },
+    "slow": "Still working? Large libraries can take longer. If nothing changes for an hour, ask the person who set up LibrePhotos to look at the log.",
+    "failed": {
+      "tab": "Update failed · LibrePhotos",
+      "E001": {
+        "title": "This LibrePhotos is too old to update in one step",
+        "text": "Your photos and settings are unchanged. Install version 1.1.0 first, start it once, then update again.",
+        "details": "The database is older than LibrePhotos 2026w10, the oldest release this version can update from (reason code E001)."
+      },
+      "E002": {
+        "title": "This database belongs to a newer LibrePhotos",
+        "text": "Your photos and settings are unchanged. The database was already updated by a newer release. Install that release or a newer one again.",
+        "details": "A newer LibrePhotos release has already updated this database, and this older release cannot run on it (reason code E002)."
+      },
+      "unknown": {
+        "title": "The update could not finish",
+        "text": "LibrePhotos did not start. Your photos are unchanged. The reason is in the logs folder: command_migrate.log (Docker) or console.log (Windows app).",
+        "details": "The database update stopped with an error. The log named above says which step failed and why."
+      }
+    },
+    "elapsed": {
+      "updating": "Updating for {{duration}}",
+      "waiting": "Waiting for {{duration}}"
+    },
+    "nextCheck": "Checking again in {{seconds}} s",
+    "checking": "Checking…",
+    "checkNow": "Check now",
+    "upgradeGuide": "Open the upgrade guide",
+    "copyDetails": "Copy details",
+    "copied": "Copied",
+    "detailsTitle": "For the person who runs this server",
+    "back": {
+      "title": "LibrePhotos is back",
+      "message": "The server answers again."
+    }
+  },
+  "upgradetasks": {
+    "header": "Finish the upgrade",
+    "finishedheader": "The upgrade is finished",
+    "left_one": "{{count}} left",
+    "left_other": "{{count}} left",
+    "intro": "This update left a few things to do once. Automatic tasks run by themselves; you can follow them here or in the job list.",
+    "finishedintro": "Everything the update left to do is done. This card goes away tomorrow.",
+    "automatic": "Automatic",
+    "optional": "Optional",
+    "start": "Start",
+    "retry": "Retry",
+    "notnow": "Not now",
+    "progress": "{{done}} of {{total}} · {{percent}}",
+    "waiting": "Waiting for the running job to finish",
+    "notstarted": "Not started yet",
+    "failed": "Stopped: {{error}}",
+    "failednoreason": "The last run did not finish.",
+    "done": "Done {{when}}",
+    "viewjob": "View job",
+    "status": {
+      "pending": "To do",
+      "running": "Running",
+      "failed": "Failed",
+      "done": "Done"
+    },
+    "unknown": {
+      "title": "Another task from the update ({{key}})",
+      "description": "Start it to finish the update."
+    },
+    "semantic_search_conversion": {
+      "title": "Update search for the new search model",
+      "description": "Search results may be incomplete until this finishes. Your photos are not changed."
+    },
+    "strip_thumbnail_metadata": {
+      "title": "Remove photo details from old thumbnails",
+      "description": "Thumbnails made by LibrePhotos 1.2.1 or older still contain details from the original photo, such as where it was taken. Your photos are not changed."
+    },
+    "refresh_exposure_times": {
+      "title": "Read shutter speeds again",
+      "description": "LibrePhotos 1.3.0 and older stored some shutter speeds wrongly, such as 0 for very short ones. This reads them again from your photos. Your photos are not changed."
+    },
+    "probe_videos": {
+      "title": "Read colour information of older videos",
+      "titlecount_one": "Read colour information of {{count}} older video",
+      "titlecount_other": "Read colour information of {{count}} older videos",
+      "description": "So HDR videos play with the right colours and get new thumbnails. Your videos are not changed."
+    }
+  },
+  "movephotos": {
+    "title": "Move to another folder",
+    "destination": "Destination",
+    "destinationhint": "A folder of your library. A new folder is made when the photos move.",
+    "pickfolder": "Pick a folder of your library.",
+    "absolutepath": "Enter the full path of the folder, as the tree shows it.",
+    "foldername": "Enter a name for the folder.",
+    "badfoldername": "A folder name has no / or \\ and does not start with a dot.",
+    "pickparent": "Pick the folder to make it in first.",
+    "newfolder": "New folder",
+    "newfoldername": "New folder name",
+    "addfolder": "Add",
+    "checking": "Checking the folder…",
+    "checkfailed": "The folder could not be checked.",
+    "folderrefused": "This folder cannot take the photos.",
+    "nothingtomove": "None of the selected photos can move here.",
+    "move_one": "Move {{count}} photo",
+    "move_other": "Move {{count}} photos",
+    "filesnote": "RAW files, Live Photo videos and XMP sidecars move with their photo. Nothing in the folder is overwritten.",
+    "summary_one": "{{count}} photo with {{files}} files will move.",
+    "summary_other": "{{count}} photos with {{files}} files will move.",
+    "unchanged_one": "{{count}} photo is already in this folder.",
+    "unchanged_other": "{{count}} photos are already in this folder.",
+    "clashes_one": "{{count}} photo has a name that is taken in this folder: you choose what to do next.",
+    "clashes_other": "{{count}} photos have a name that is taken in this folder: you choose what to do next.",
+    "refused": {
+      "nextcloud_one": "{{count}} photo is a copy of a Nextcloud file and stays where it is.",
+      "nextcloud_other": "{{count}} photos are copies of Nextcloud files and stay where they are.",
+      "shared_file_one": "{{count}} photo shares a file with another photo and stays where it is.",
+      "shared_file_other": "{{count}} photos share a file with another photo and stay where they are.",
+      "not_on_disk_one": "{{count}} photo has no files on disk and stays where it is.",
+      "not_on_disk_other": "{{count}} photos have no files on disk and stay where they are."
+    },
+    "listfailed": "The folders could not be read.",
+    "truncated": "More folders are not shown. Type the path above.",
+    "nolibrary": "You have no library folder yet. An admin sets your scan directory.",
+    "treelabel": "Library folders",
+    "expand": "Open {{name}}",
+    "collapse": "Close {{name}}",
+    "currentfolder": "Current",
+    "newbadge": "New",
+    "conflicttitle_one": "{{count}} name is taken in {{folder}}",
+    "conflicttitle_other": "{{count}} names are taken in {{folder}}",
+    "conflictintro_one": "The folder already has a file with the name of this photo.",
+    "conflictintro_other": "The folder already has files with the names of these {{count}} photos.",
+    "clashname": "In the folder",
+    "clashrenamed": "Rename gives",
+    "becomes": "becomes",
+    "nofreename": "No free name",
+    "moreclashes_one": "and {{count}} more",
+    "moreclashes_other": "and {{count}} more",
+    "renamehint": "Rename, keep both: the moved photo gets a free name, such as IMG_1 (1).jpg, for all its files.",
+    "skiphint_one": "Skip: this photo stays where it is.",
+    "skiphint_other": "Skip: these {{count}} photos stay where they are.",
+    "skip_one": "Skip this photo",
+    "skip_other": "Skip {{count}} photos",
+    "rename": "Rename, keep both"
   }
 }

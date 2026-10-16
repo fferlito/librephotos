@@ -49,6 +49,7 @@ type PhotoGridKind =
   | "withoutTimestamp"
   | "withoutLocation"
   | "notInAlbum"
+  | "myPublicPhotos"
   | "sharedByMe"
   | "sharedWithMe";
 
@@ -102,6 +103,8 @@ export const photoGridKeys = {
   withoutLocation: (page: number, mediaType: MediaType) => [...gridKind("withoutLocation"), page, mediaType] as const,
   /** One page of the photos in none of my albums. */
   notInAlbum: (page: number, mediaType: MediaType) => [...gridKind("notInAlbum"), page, mediaType] as const,
+  /** The first `pageSize` of my own public photos and their count (the Sharing overview). */
+  myPublicPhotos: (pageSize: number) => [...gridKind("myPublicPhotos"), pageSize] as const,
   /** The photos I shared, grouped by recipient (web). */
   sharedByMe: () => gridKind("sharedByMe"),
   /** The photos I shared, one row per share as the server sends them. */
@@ -134,6 +137,9 @@ export const photoKeys = {
   locationSummary: (selection: Record<string, unknown>) => [...photoRoot, "locationSummary", selection] as const,
   /** The geotagged photos taken in a window, to copy a location from. */
   locatedNearby: (from: string, to: string) => [...photoRoot, "locatedNearby", from, to] as const,
+  /** What moving a selection to a folder would do (#352), keyed by the selection and the folder. */
+  movePreview: (selection: Record<string, unknown>, targetFolder: string) =>
+    [...photoRoot, "movePreview", selection, targetFolder] as const,
 };
 
 // The album lists and pickers. An album's photos are a grid: photoGridKeys.
@@ -246,6 +252,8 @@ export const folderKeys = {
   all: folderRoot,
   dirTree: (path: string) => [...folderRoot, "dirTree", path] as const,
   nextcloudDirs: () => [...folderRoot, "nextcloudDirs"] as const,
+  /** One level of the folders a move can go to (#352); null: the library folders themselves. */
+  moveTargets: (path: string | null) => [...folderRoot, "moveTargets", path] as const,
 };
 
 const geocodeRoot = ["geocode"] as const;
@@ -263,6 +271,8 @@ export const jobKeys = {
   all: jobRoot,
   list: (request: JobListParams) => [...jobRoot, "list", request] as const,
   detail: (id: number) => [...jobRoot, "detail", id] as const,
+  /** The Finish the upgrade card's tasks (#2322): under `all`, so a job change refreshes them. */
+  upgradeTasks: () => [...jobRoot, "upgradeTasks"] as const,
   /** Whether the worker can take a job (not under `all`: a job change does not always move it). */
   worker: () => ["worker"] as const,
 };
@@ -321,6 +331,9 @@ export const settingsKeys = {
   predefinedRules: () => [...settingsRoot, "predefinedRules"] as const,
   timezones: () => [...settingsRoot, "timezones"] as const,
   trashRetentionPreview: (days: number) => [...settingsRoot, "trashRetentionPreview", days] as const,
+  /** What "Write metadata to files" would write, for the saved write mode and face tag switch. */
+  writeMetadataPreview: (mode: string, faceTags: boolean) =>
+    [...settingsRoot, "writeMetadataPreview", mode, faceTags] as const,
 };
 
 const stackRoot = ["stacks"] as const;

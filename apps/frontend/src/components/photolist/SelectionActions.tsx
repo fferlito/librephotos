@@ -30,15 +30,17 @@ import { ICON_SIZE, TOOLBAR_ACTION_SIZE } from "../../uiConstants";
 import { copyToClipboard } from "../../util/util";
 import { PersonRemovePhotosModal } from "../album/PersonRemovePhotosModal";
 import { DisabledReason } from "../common/DisabledReason";
-import { BulkLocationModal } from "../map/BulkLocationModal";
 import { ModalDownloadOptions } from "../modals/ModalDownloadOptions";
 import { AddToMenu } from "./AddToMenu";
 import { albumPageKind, AlbumSelectionActions, type AlbumPageKind } from "./AlbumSelectionActions";
-import { ChangeDateTimeModal } from "./ChangeDateTimeModal";
+import { SelectionFileItems } from "./FileActionItems";
+import { SelectionEditDialogs } from "./SelectionEditDialogs";
 import { SelectionEditItems } from "./SelectionEditItems";
+import { selectionLabel } from "./selectionLabel";
 import { SelectionRatingItems } from "./SelectionRatingItems";
 import { SelectionVisibilityItems } from "./SelectionVisibilityItems";
 import { StackSelectionActions } from "./StackSelectionActions";
+import { useSelectionEditDialogs } from "./useSelectionEditDialogs";
 
 /** The albums whose cover the selection can set. */
 export type AlbumCoverType = AlbumPageKind;
@@ -109,6 +111,15 @@ export function SelectionActions(props: Readonly<Props>) {
       ? { select_all: true, query: selectAllQuery ?? {}, excluded_hashes: getExcludedHashes() }
       : { image_hashes: getImageHashes() };
 
+  // The menus' headings say what they act on, in the selection bar's words
+  const selection = selectionLabel(t, {
+    selectAllMode,
+    total: totalCount ?? 0,
+    // In select-all mode the list holds the exclusions
+    excluded: selectedItems.length,
+    selected: selectedItems.length,
+  });
+
   // Check if any action is possible
   const hasSelection = selectAllMode || selectedItems.length > 0;
   // Why the photo actions are off (#2608): they say so, and stay in the menu's arrow-key order.
@@ -124,8 +135,7 @@ export function SelectionActions(props: Readonly<Props>) {
   // Download modal state
   const [isDownloadModalOpen, { open: openDownloadModal, close: closeDownloadModal }] = useDisclosure(false);
   const [isRemoveFromPersonOpen, { open: openRemoveFromPerson, close: closeRemoveFromPerson }] = useDisclosure(false);
-  const [isDateTimeOpen, { open: openDateTime, close: closeDateTime }] = useDisclosure(false);
-  const [isSetLocationOpen, { open: openSetLocation, close: closeSetLocation }] = useDisclosure(false);
+  const editDialogs = useSelectionEditDialogs();
   const albumPage = albumPageKind(location.pathname);
 
   // In select-all mode the modal can only show an upper bound, because the
@@ -163,14 +173,12 @@ export function SelectionActions(props: Readonly<Props>) {
         onRequestClose={() => closeDownloadModal()}
         onConfirm={handleDownloadConfirm}
       />
-      {/* Mounted while open only: it asks the server for the selection's dates. */}
-      {isDateTimeOpen && (
-        <ChangeDateTimeModal opened onClose={closeDateTime} selection={photoSelection()} onSaved={resetSelection} />
-      )}
-      {/* Mounted only while open: it asks the server about the selection. */}
-      {isSetLocationOpen && (
-        <BulkLocationModal opened onClose={closeSetLocation} selection={photoSelection()} onDone={resetSelection} />
-      )}
+      <SelectionEditDialogs
+        dialogs={editDialogs}
+        selection={photoSelection}
+        onDone={resetSelection}
+        pathname={location.pathname}
+      />
       {albumPage === "person" && (
         <PersonRemovePhotosModal
           opened={isRemoveFromPersonOpen}
@@ -181,12 +189,7 @@ export function SelectionActions(props: Readonly<Props>) {
           onRemoved={resetSelection}
         />
       )}
-      <AddToMenu
-        reason={noSelection}
-        selectedCount={selectAllMode ? t("selectionbar.all") : selectedItems.length}
-        onAddToAlbum={onAddToAlbum}
-        onAddTags={onAddTags}
-      />
+      <AddToMenu reason={noSelection} selection={selection} onAddToAlbum={onAddToAlbum} onAddTags={onAddTags} />
 
       {/* Wide enough for the one-line notes under Hide and Archive. */}
       <Menu width={260}>
@@ -203,8 +206,7 @@ export function SelectionActions(props: Readonly<Props>) {
 
         <Menu.Dropdown>
           <Menu.Label>
-            {t("selectionactions.photoactions")} ({selectAllMode ? t("selectionbar.all") : selectedItems.length}{" "}
-            {t("selectionactions.selected")})
+            {t("selectionactions.labelwithselection", { label: t("selectionactions.photoactions"), selection })}
           </Menu.Label>
 
           <Menu.Divider />
@@ -220,8 +222,9 @@ export function SelectionActions(props: Readonly<Props>) {
 
           <SelectionEditItems
             disabledReason={noSelection}
-            onSetLocation={openSetLocation}
-            onChangeDateTime={openDateTime}
+            onSetLocation={editDialogs.location.open}
+            onChangeDateTime={editDialogs.dateTime.open}
+            onMoveToFolder={editDialogs.move.open}
           />
 
           <Menu.Divider />
@@ -249,6 +252,14 @@ export function SelectionActions(props: Readonly<Props>) {
           </DisabledReason>
 
           <Menu.Divider />
+
+          <SelectionFileItems
+            selectedItems={selectedItems}
+            selectAllMode={selectAllMode}
+            userId={userId}
+            disabledReason={noSelection}
+            onDone={resetSelection}
+          />
 
           <DisabledReason reason={noSelection} position="left">
             <Menu.Item

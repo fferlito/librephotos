@@ -1,7 +1,7 @@
 import { z } from "zod";
 import * as S from "../schemas";
 import { Photoset } from "../schemas";
-import { runningJobId } from "../transport/client";
+import { ApiError, runningJobId } from "../transport/client";
 import { fetchAllPages, fetchAllPagesWithFirst } from "../transport/pages";
 import type { ApiClient } from "../transport/types";
 import { buildQuery, parseEachResponse, parseResponse, type ParsedEntries } from "../util/parse";
@@ -344,6 +344,15 @@ export async function fetchPhotosNotInAlbum(
 ): Promise<S.PhotosNotInAlbumResponse> {
   const res = await client.get<unknown>(`/photos/no-album/${buildQuery({ page, ...albumMediaQuery(filter) })}`);
   return parseResponse(S.PhotosNotInAlbumResponse, res, "photos not in an album");
+}
+
+/**
+ * The first `pageSize` of my own public photos, newest first, and how many there are (`count`).
+ * Other users' public photos are not in it.
+ */
+export async function fetchMyPublicPhotos(client: ApiClient, pageSize: number): Promise<S.MyPublicPhotosResponse> {
+  const res = await client.get<unknown>(`/photos/public/${buildQuery({ page_size: pageSize })}`);
+  return parseResponse(S.MyPublicPhotosResponse, res, "my public photos");
 }
 
 /* ---- albums (user / auto / thing / place) ----------------------------- */
@@ -919,6 +928,37 @@ export async function stripThumbnailMetadata(client: ApiClient): Promise<S.JobSt
   return triggerJob(client, "/strip-thumbnail-metadata/", S.JobStartedResponse, "strip thumbnail metadata");
 }
 
+/** The post-upgrade tasks this instance still has, and those done in the last day (admins only, #2322). */
+export async function fetchUpgradeTasks(client: ApiClient): Promise<S.UpgradeTaskList> {
+  const res = await client.get<unknown>("/upgrade-tasks/");
+  return parseResponse(S.UpgradeTaskList, res, "upgrade tasks");
+}
+
+/**
+ * Start (or retry) a post-upgrade task (admins only, #2322). While another job is queued or
+ * running the server refuses with 409 `queue_busy`; its own job running resolves as that job.
+ */
+export async function startUpgradeTask(
+  client: ApiClient,
+  key: string
+): Promise<S.JobStartedResponse | S.JobAlreadyRunning> {
+  return triggerJob(client, `/upgrade-tasks/${encodeURIComponent(key)}/start/`, S.JobStartedResponse, "upgrade task");
+}
+
+/** Not now: hide an optional post-upgrade task for good (400 `task_required` for a required one). */
+export async function dismissUpgradeTask(client: ApiClient, key: string): Promise<S.UpgradeTaskList> {
+  const res = await client.post<unknown>(`/upgrade-tasks/${encodeURIComponent(key)}/dismiss/`, {});
+  return parseResponse(S.UpgradeTaskList, res, "dismiss upgrade task");
+}
+
+/**
+ * Look the place names of every photo up again with the current Map Provider, over the whole
+ * instance (admins only, #2302). Returns the queued (or already running) job.
+ */
+export async function lookUpPlaces(client: ApiClient): Promise<S.JobStartedResponse | S.JobAlreadyRunning> {
+  return triggerJob(client, "/look-up-places/", S.JobStartedResponse, "look up place names");
+}
+
 /**
  * Permanently delete every photo in the signed-in user's trash, files included, as a job (#2203).
  * Returns the queued (or already running) job.
@@ -933,6 +973,55 @@ export async function emptyTrash(client: ApiClient): Promise<S.JobStartedRespons
  */
 export async function reapplyDateRules(client: ApiClient): Promise<S.JobStartedResponse | S.JobAlreadyRunning> {
   return triggerJob(client, "/photos/reapply-date-rules/", S.JobStartedResponse, "apply date rules");
+}
+
+/**
+ * What "Write metadata to files" (#2287) would write for the signed-in user now: where (the saved
+ * "Write edits to files"), and how many photos each type writes.
+ */
+export async function fetchWriteMetadataPreview(client: ApiClient): Promise<S.WriteMetadataPreview> {
+  const res = await client.get<unknown>("/savemetadata/");
+  return parseResponse(S.WriteMetadataPreview, res, "write metadata preview");
+}
+
+/**
+ * Write the edits already in LibrePhotos to the signed-in user's files, as a job (#2287): `types`, or
+ * everything their settings write. Returns the queued (or already running) job.
+ */
+export async function writeMetadataToFiles(
+  client: ApiClient,
+  types?: readonly string[]
+): Promise<S.WriteMetadataStarted | S.JobAlreadyRunning> {
+  return triggerJob(
+    client,
+    "/savemetadata/",
+    S.WriteMetadataStarted,
+    "write metadata to files",
+    types ? { types } : {}
+  );
+}
+
+/**
+ * Read the files of some of the signed-in user's photos again (#2214), also unchanged ones: their
+ * thumbnails, metadata, date and hashes. At most 1,000 photos. ApiError 404 when none is the
+ * user's, 400 (`no_files_to_scan`) when none has a file left in their library.
+ */
+export async function rescanPhotos(
+  client: ApiClient,
+  photoIds: readonly string[]
+): Promise<S.RescanPhotosResponse | S.JobAlreadyRunning> {
+  return triggerJob(client, "/photos/rescan/", S.RescanPhotosResponse, "rescan photos", { photo_ids: photoIds });
+}
+
+/**
+ * Scan files an outside process says are new or changed (#900): paths as the server sees them,
+ * at most 1,000. Only files in the user's library are scanned; the answer lists the paths left out.
+ */
+export async function scanFiles(
+  client: ApiClient,
+  paths: readonly string[]
+): Promise<S.ScanFilesResponse | S.JobAlreadyRunning> {
+  return triggerJob(client, "/scan-files/", S.ScanFilesResponse, "scan files", { paths });
 }
 
 /** Make event albums from the photos added or changed since the last run, and title them. */
@@ -1325,9 +1414,16 @@ export async function trainFaces(client: ApiClient): Promise<S.JobTriggerRespons
   return triggerJob(client, "/trainfaces", S.JobTriggerResponse, "train faces");
 }
 
-/** Detect faces again in every photo (ApiError 403 when face detection is turned off). */
-export async function scanFaces(client: ApiClient): Promise<S.JobTriggerResponse> {
-  return triggerJob(client, "/scanfaces", S.JobTriggerResponse, "scan faces");
+/** Where a face scan looks (#524): every photo, one folder (and those below it), or some photos. */
+export type FaceScanScope = Record<string, never> | { path: string } | { photo_ids: readonly string[] };
+
+/**
+ * Detect faces again in every photo, or with `scope` in one folder or some photos of the user's
+ * (#524). ApiError 403 when face detection is turned off, 400 for a folder outside the library,
+ * 404 when none of the photos is the user's.
+ */
+export async function scanFaces(client: ApiClient, scope: FaceScanScope = {}): Promise<S.JobTriggerResponse> {
+  return triggerJob(client, "/scanfaces", S.JobTriggerResponse, "scan faces", scope);
 }
 
 /**
@@ -1412,6 +1508,48 @@ export async function fetchServerLogs(client: ApiClient, lines: number): Promise
 /** Admin: the whole server log file, to save. */
 export async function fetchServerLogFile(client: ApiClient): Promise<Blob> {
   return client.getBlob("/serverlogs");
+}
+
+/* ---- health ------------------------------------------------------------- */
+
+const READY: S.BackendReadiness = { state: "ready" };
+const UNREACHABLE: S.BackendNotReady = { state: "unreachable", reasonCode: null, version: null };
+
+/** A proxy's answer for a server that does not answer (Bad Gateway, Gateway Timeout). */
+const GATEWAY_ERRORS = new Set([502, 504]);
+
+/**
+ * The startup placeholder's 503 names its phase; any other 503 (the running server's own when a
+ * dependency is down, or a proxy's) does not.
+ */
+function startupReadiness(body: unknown): S.BackendReadiness {
+  const startup = S.StartupStatus.safeParse(body);
+  if (!startup.success) return UNREACHABLE;
+  const { status, reason_code: reasonCode, version } = startup.data;
+  return { state: status, reasonCode: reasonCode ?? null, version: version ?? null };
+}
+
+/** What a readiness probe that did not answer 200 says about the server. */
+function readinessFromError(error: unknown): S.BackendReadiness {
+  // No answer at all (fetch rejected: server down, network gone), or the proxy answered for it.
+  if (!(error instanceof ApiError) || GATEWAY_ERRORS.has(error.status)) return UNREACHABLE;
+  // Any other answer comes from the server, so it serves requests again: the app's own error
+  // handling takes over from here, rather than a status screen that could never go away.
+  return error.status === 503 ? startupReadiness(error.body) : READY;
+}
+
+/**
+ * Whether the server serves requests yet (`/healthz/ready/`). Never rejects: a 200 is `ready`
+ * (its `HealthReady` body is not needed), a 503 from the startup placeholder names its phase
+ * (`StartupStatus`), and no answer, a proxy's 502-504 or another 503 is `unreachable`.
+ */
+export async function fetchBackendReadiness(client: ApiClient): Promise<S.BackendReadiness> {
+  try {
+    await client.get<unknown>("/healthz/ready/");
+    return READY;
+  } catch (error) {
+    return readinessFromError(error);
+  }
 }
 
 /* ---- services (sidecars) ------------------------------------------------ */
@@ -1545,6 +1683,50 @@ export async function fetchLocatedNearbyInTime(
   const params = new URLSearchParams({ from, to });
   const res = await client.get<unknown>(`/photos/located-nearby-in-time/?${params.toString()}`);
   return parseResponse(S.LocatedPhotosResponse, res, "photos located nearby in time");
+}
+
+/* ---- moving photos (#352) ----------------------------------------------- */
+
+/** Where the selected photos go and what to do with a name taken there (absent: a 409 `name_conflict`). */
+export type MovePhotosTarget = { targetFolder: string; onConflict?: S.MoveOnConflict };
+
+/** What moving the selected photos to `targetFolder` would do: counts, refusals and taken names. */
+export async function previewPhotosMove(
+  client: ApiClient,
+  imageHashes: string[],
+  targetFolder: string,
+  selectAll?: SelectAllPhotos
+): Promise<S.MovePreviewResponse> {
+  const res = await client.post<unknown>("/photos/move/preview/", {
+    ...photoSelection(imageHashes, selectAll),
+    target_folder: targetFolder,
+  });
+  return parseResponse(S.MovePreviewResponse, res, "preview photos move");
+}
+
+/**
+ * Move the selected photos, with all their files, to a folder of the library. A small selection
+ * answers the counts; a large one the "Move Photos" job that does it (`job_id`).
+ */
+export async function movePhotos(
+  client: ApiClient,
+  imageHashes: string[],
+  target: MovePhotosTarget,
+  selectAll?: SelectAllPhotos
+): Promise<S.MovePhotosAnswer> {
+  const res = await client.post<unknown>("/photos/move/", {
+    ...photoSelection(imageHashes, selectAll),
+    target_folder: target.targetFolder,
+    ...(target.onConflict ? { on_conflict: target.onConflict } : {}),
+  });
+  return parseResponse(S.MovePhotosAnswer, res, "move photos");
+}
+
+/** The subfolders of `path` a move can go to; without it the library folders themselves. */
+export async function fetchMoveFolders(client: ApiClient, path: string | null): Promise<S.LibraryFolderListing> {
+  const query = path === null ? "" : `?${new URLSearchParams({ path }).toString()}`;
+  const res = await client.get<unknown>(`/photos/move/folders/${query}`);
+  return parseResponse(S.LibraryFolderListing, res, "move folders");
 }
 
 /* ---- media -------------------------------------------------------------- */
@@ -1978,6 +2160,19 @@ export async function setUserAlbumCollections(
     body: { collection_ids: collectionIds },
   });
   return parseResponse(S.UserAlbumCollections, res, "set user album collections");
+}
+
+/**
+ * Pick an event's cover (#429): one of its photos by id, or null for the automatic cover. A photo
+ * outside the event is a 400 `not_in_event`.
+ */
+export async function setAutoAlbumCover(
+  client: ApiClient,
+  albumId: number | string,
+  coverPhoto: string | null
+): Promise<S.AutoAlbumEdit> {
+  const res = await client.patch<unknown>(`/albums/auto/${albumId}/`, { cover_photo: coverPhoto });
+  return parseResponse(S.AutoAlbumEdit, res, "set event cover");
 }
 
 /** Delete one event album. Answers 204. */

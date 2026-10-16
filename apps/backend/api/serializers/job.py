@@ -1,13 +1,32 @@
+from django.db.models import Prefetch
 from rest_framework import serializers
 
 from api.drf.params import QueryFlagField
-from api.models import LongRunningJob
+from api.jobs.upgrade_tasks import TaskList, TaskOverview
+from api.models import LongRunningJob, User
+from api.models.long_running_job import LongRunningJobQuerySet
+from api.photos.library_files import MAX_REQUESTED
+from api.serializers.fields import loaded
 from api.serializers.simple import SimpleUserSerializer
+
+
+def with_job_relations(queryset: LongRunningJobQuerySet) -> LongRunningJobQuerySet:
+    """What ``LongRunningJobSerializer`` reads: the starter and the baseline flag."""
+    return queryset.with_scan_baseline_flag().prefetch_related(
+        Prefetch(
+            "started_by",
+            queryset=User.objects.only("id", "username", "first_name", "last_name"),
+        ),
+    )
 
 
 class LongRunningJobSerializer(serializers.ModelSerializer):
     job_type_str = serializers.SerializerMethodField()
     started_by = SimpleUserSerializer(read_only=True)
+    is_scan_baseline = serializers.SerializerMethodField(
+        help_text="The starter's newest complete library scan: the next incremental "
+        "scan only rereads files changed since it, so it cannot be removed"
+    )
 
     class Meta:
         model = LongRunningJob
@@ -26,6 +45,7 @@ class LongRunningJobSerializer(serializers.ModelSerializer):
             "progress_target",
             "progress_step",
             "result",
+            "is_scan_baseline",
             "id",
         )
         # Workers write jobs; the API only reports them.
@@ -33,6 +53,9 @@ class LongRunningJobSerializer(serializers.ModelSerializer):
 
     def get_job_type_str(self, obj: LongRunningJob) -> str:
         return dict(LongRunningJob.JOB_TYPES)[obj.job_type]
+
+    def get_is_scan_baseline(self, obj: LongRunningJob) -> bool:
+        return bool(loaded(obj, "is_scan_baseline"))
 
 
 class CancelJobResponseSerializer(serializers.Serializer[None]):
@@ -91,4 +114,95 @@ class CaptionsJobStartedResponseSerializer(JobStartedResponseSerializer):
 
     downloads_model = serializers.BooleanField(
         help_text="The captioning model is downloaded first: the job starts after it"
+    )
+
+
+class UpgradeTaskSerializer(serializers.Serializer[TaskOverview]):
+    """One row of the Admin page's Finish the upgrade card (``api.jobs.upgrade_tasks``)."""
+
+    key = serializers.CharField(
+        help_text="The task's name; the web app has its title and sentence"
+    )
+    kind = serializers.ChoiceField(
+        choices=["automatic", "action"],
+        help_text="automatic: runs by itself; action: waits for Start",
+    )
+    optional = serializers.BooleanField(
+        help_text="An optional task may be dismissed; automatic ones are required"
+    )
+    status = serializers.ChoiceField(
+        choices=["pending", "running", "failed", "done"],
+        help_text="done: finished in the last day; failed: the last run failed "
+        "or was cancelled",
+    )
+    count = serializers.IntegerField(
+        allow_null=True, help_text="How many items the task works on, when it says"
+    )
+    progress_current = serializers.IntegerField(
+        allow_null=True, help_text="Items done by the running jobs; null when none runs"
+    )
+    progress_target = serializers.IntegerField(
+        allow_null=True, help_text="Items of the running jobs; null when none runs"
+    )
+    latest_job_id = serializers.IntegerField(
+        allow_null=True,
+        help_text="The running job, else the last one since the task appeared "
+        "(a job list id)",
+    )
+    error = serializers.CharField(
+        allow_null=True, help_text="Why the last run failed, when it says"
+    )
+    completed_at = serializers.DateTimeField(
+        allow_null=True, help_text="When the task stopped being needed"
+    )
+
+
+class UpgradeTaskListSerializer(serializers.Serializer[TaskList]):
+    """``GET /api/upgrade-tasks/``: the tasks an upgrade left, done ones for a day."""
+
+    tasks = UpgradeTaskSerializer(many=True)
+
+
+class RescanPhotosRequest(serializers.Serializer[None]):
+    """``POST /api/photos/rescan/``: the photos whose files to read again (#2214)."""
+
+    photo_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        min_length=1,
+        max_length=MAX_REQUESTED,
+        help_text="Ids of the requester's photos; someone else's id is ignored",
+    )
+
+
+class RescanPhotosResponseSerializer(JobStartedResponseSerializer):
+    """``POST /api/photos/rescan/``: the started scan and what it reads."""
+
+    photo_count = serializers.IntegerField(
+        help_text="The photos whose files are read again"
+    )
+    file_count = serializers.IntegerField(
+        help_text="Their files: main files, variants and sidecars"
+    )
+
+
+class ScanFilesRequest(serializers.Serializer[None]):
+    """``POST /api/scan-files/``: files an outside process says are new or changed (#900)."""
+
+    paths = serializers.ListField(
+        child=serializers.CharField(trim_whitespace=False),
+        min_length=1,
+        max_length=MAX_REQUESTED,
+        help_text="Absolute paths of files in the requester's scan directory "
+        "or upload folder, as the server sees them",
+    )
+
+
+class ScanFilesResponseSerializer(JobStartedResponseSerializer):
+    """``POST /api/scan-files/``: the started scan and the paths it left out."""
+
+    file_count = serializers.IntegerField(help_text="The files the scan looks at")
+    ignored_paths = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="Paths left out: outside the requester's library, folders, "
+        "files that do not exist, and repeats",
     )

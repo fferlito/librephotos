@@ -26,6 +26,7 @@ from api.metadata.reader import (
     sidecar_for_write,
 )
 from api.metadata.tags import Tags
+from api.metadata.takeout import takeout_metadata_of
 from api.metadata.writer import (
     MetadataWriteError,
     TagValue,
@@ -34,9 +35,10 @@ from api.metadata.writer import (
     remove_from,
     write_metadata,
 )
+from api.models.file import File
 from api.models.photo_caption import PhotoCaption
 from api.models.photo_metadata import (
-    DESCRIPTION_SOURCES,
+    FILE_DESCRIPTION_SOURCES,
     IMPORTED_DESCRIPTION_KEY,
     PhotoMetadata,
     description_of,
@@ -44,6 +46,7 @@ from api.models.photo_metadata import (
 )
 from api.models.tag import Tag
 from api.models.user import User
+from api.photos import indexed_mtimes
 from api.photos.paths import is_nextcloud_copy
 
 if TYPE_CHECKING:
@@ -68,7 +71,7 @@ def write_target(user: User) -> bool | None:
     return None
 
 
-def _keeps_edits(photo: Photo) -> bool:
+def keeps_edits(photo: Photo) -> bool:
     """Whether an edit written into ``photo``'s file would stay there.
 
     Not for a local copy of a Nextcloud file (#2258): the next scan that finds
@@ -150,9 +153,11 @@ def write_photo_metadata(
 
         tags_to_write.update(get_face_region_tags(photo, use_sidecar))
 
-    if tags_to_write and _keeps_edits(photo):
+    if tags_to_write and keeps_edits(photo):
         assert photo.main_file is not None
+        indexed = _indexed_files(photo)
         write_metadata(photo.main_file.path, tags_to_write, use_sidecar=use_sidecar)
+        indexed_mtimes.record_own_write(indexed)
 
 
 # ---------------------------------------------------------- caption, location
@@ -203,7 +208,7 @@ def _remember_file_description(photo: Photo) -> None:
     from api.metadata.photo_reader import EXIF_FIELDS
 
     assert photo.main_file is not None
-    names = (*DESCRIPTION_SOURCES, "camera")
+    names = (*FILE_DESCRIPTION_SOURCES, "camera")
     tag_of = dict(EXIF_FIELDS)
     try:
         values = get_metadata(
@@ -218,7 +223,13 @@ def _remember_file_description(photo: Photo) -> None:
             error,
         )
         return
-    description = description_of(dict(zip(names, values)))
+    takeout = takeout_metadata_of(photo)
+    description = description_of(
+        {
+            **dict(zip(names, values)),
+            "takeout_description": takeout.description if takeout else None,
+        }
+    )
     with transaction.atomic():
         caption = PhotoCaption.objects.select_for_update().filter(photo=photo).first()
         if caption is None:
@@ -321,6 +332,23 @@ def write_location(photo: Photo, use_sidecar: bool) -> None:
     )
 
 
+def _indexed_files(photo: Photo) -> list[str]:
+    """The photo's media files that are as the scan last read them (#2296).
+
+    Asked right before a write: a write that lands is recorded for these
+    (``indexed_mtimes.record_own_write``), so the next scan does not read the
+    photo again for it, while a change another app made before it is still
+    picked up. Every media file of the photo, not only the main one: a RAW
+    and its JPEG may share one sidecar (``IMG.xmp``).
+    """
+    assert photo.main_file is not None
+    paths = {
+        photo.main_file.path,
+        *photo.files.exclude(type=File.METADATA_FILE).values_list("path", flat=True),
+    }
+    return indexed_mtimes.as_indexed(paths)
+
+
 def _write_edit(
     photo: Photo,
     tags: dict[str, TagValue],
@@ -332,14 +360,16 @@ def _write_edit(
     Returns whether ExifTool wrote; a removal from a sidecar that does not
     exist has nothing to do.
     """
-    if not _keeps_edits(photo):
+    if not keeps_edits(photo):
         return False
     assert photo.main_file is not None
     path = photo.main_file.path
     removes_only = all(value == "" for value in tags.values())
     if use_sidecar and removes_only and not existing_sidecars(path):
         return False
+    indexed = _indexed_files(photo)
     write_metadata(path, tags, use_sidecar=use_sidecar, options=options)
+    indexed_mtimes.record_own_write(indexed)
     return True
 
 
@@ -372,7 +402,7 @@ def write_keywords(photo: Photo, use_sidecar: bool, names: Collection[str]) -> N
 
     Raises ``MetadataWriteError`` when ExifTool did not write them.
     """
-    if not names or not _keeps_edits(photo):
+    if not names or not keeps_edits(photo):
         return
     wanted, unwanted = _split_by_tags(photo, names)
     if unwanted:
@@ -618,13 +648,10 @@ def write_orientation_to_disk(photo: Photo) -> str | None:
     either way.
     """
     use_sidecar = write_target(photo.owner)
-    if use_sidecar is None or not _keeps_edits(photo):
+    if use_sidecar is None:
         return None
     try:
-        if use_sidecar:
-            _write_sidecar_orientation(photo)
-        else:
-            _fold_rotation_into_file(photo)
+        write_rotation(photo, use_sidecar)
     except MetadataWriteError as error:
         logger.warning(
             "The rotation of photo %s was not written to disk: %s",
@@ -633,6 +660,20 @@ def write_orientation_to_disk(photo: Photo) -> str | None:
         )
         return str(error)
     return None
+
+
+def write_rotation(photo: Photo, use_sidecar: bool) -> None:
+    """Write the photo's rotation as it is now to its sidecar or media file.
+
+    Raises ``MetadataWriteError`` when ExifTool did not write it; see
+    ``write_orientation_to_disk`` for what each target gets.
+    """
+    if not keeps_edits(photo):
+        return
+    if use_sidecar:
+        _write_sidecar_orientation(photo)
+    else:
+        _fold_rotation_into_file(photo)
 
 
 def _orientation_on_disk(path: str) -> int:
@@ -673,7 +714,9 @@ def _write_sidecar_orientation(photo: Photo) -> None:
     shown = exif_orientation_showing(
         _orientation_on_disk(path), photo.local_orientation
     )
+    indexed = _indexed_files(photo)
     write_metadata(path, {Tags.ORIENTATION_XMP: shown}, use_sidecar=True)
+    indexed_mtimes.record_own_write(indexed)
 
 
 def _fold_rotation_into_file(photo: Photo) -> None:
@@ -720,6 +763,7 @@ def _fold_rotation_into_file(photo: Photo) -> None:
     combined = exif_orientation_showing(
         _orientation_on_disk(path), photo.local_orientation
     )
+    indexed = _indexed_files(photo)
     write_metadata(path, {Tags.ORIENTATION: combined}, use_sidecar=False)
 
     written = read_orientation(path)
@@ -733,6 +777,7 @@ def _fold_rotation_into_file(photo: Photo) -> None:
         )
         return
 
+    indexed_mtimes.record_own_write(indexed)
     _adopt_written_orientation(photo, combined)
 
 

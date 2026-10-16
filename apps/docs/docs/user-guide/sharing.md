@@ -13,7 +13,7 @@ The **Sharing** page (accessible from the navigation) is your central hub for al
 - **Public photos** — Other users on your instance who have made their profile public
 - **Shared with you** — Photos and albums that others have shared with you
 - **You shared** — Photos and albums you have shared with others
-- **Public Links** — Albums and photos you've shared publicly via link
+- **Public Links** — Albums and photos you've shared publicly via link. An album card shows the album's title and number of photos; a photo card says **Share link** and when you made the link, or **Public photo** and the day the photo was taken. (Not released yet: up to 1.3.0, photo cards had no caption.)
 
 ## Sharing Albums with Users
 
@@ -179,6 +179,10 @@ Only you leave: the owner keeps the album, it stays shared with everyone else, a
 ### Public Links
 
 Open **Sharing** and click the **Public Links** tile to see everything you've made publicly accessible. It has two tabs: **Albums** (albums with a public link) and **Photos** (individual photos you've marked public).
+
+The **Public Links** row on the Sharing page shows your latest public photos and counts all of them.
+
+*Not released yet: up to 1.3.0, public photos rarely showed or counted on the Sharing page or the Photos tab, and the Photos tab also listed other users' public photos.*
 
 ## Public User Profiles
 

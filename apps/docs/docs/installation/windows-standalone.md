@@ -8,6 +8,11 @@ sidebar_position: 5
 [**librephotos-windows-x64.zip**](https://github.com/LibrePhotos/librephotos/releases/latest/download/librephotos-windows-x64.zip)
 from the latest release (64-bit Windows). Every release since 1.2.0 carries it under
 **Assets** on the [releases page](https://github.com/LibrePhotos/librephotos/releases).
+
+<Since version="1.4.0" /> The same zip is also there as `librephotos-<version>-windows-x64.zip`, so a
+downloaded file says which release it is, next to `SHA256SUMS` to [check your
+download](#checking-your-download). A new release becomes the latest one only once its Windows zip
+is attached, a few hours after it is published; until then this link gives the previous release.
 :::
 
 ## What it is
@@ -34,7 +39,8 @@ either folder.
 
 ## Running it {#running-it}
 
-1. Download `librephotos-windows-x64.zip` (see above). It is about 450 MB.
+1. Download `librephotos-windows-x64.zip` (see above). It is about 450 MB. To be sure it arrived
+   complete, [check it](#checking-your-download).
 2. Open your **Downloads** folder, right-click `librephotos-windows-x64.zip` and choose **Extract
    All...**.
 3. In the box under **Files will be extracted to this folder**, replace the suggested path with a
@@ -45,7 +51,9 @@ either folder.
    may show **Windows protected your PC**, because the program is not signed: click **More info**,
    then **Run anyway**.
 5. No window opens: LibrePhotos runs in the background with an icon in the notification area (the
-   tray, bottom right), and after the first migrations your browser opens `http://localhost:8000/`.
+   tray, bottom right), and your browser opens `http://localhost:8000/`. While the first start sets
+   up the database, the page says "LibrePhotos is updating" and turns into LibrePhotos by itself
+   (not released yet: up to 1.3.0 the browser only opened after the first migrations).
    Windows 11 may put a new icon behind the **^** arrow (**Show hidden icons**) next to the clock;
    drag it from there onto the taskbar to keep it in view.
 6. Create the admin account on the first-time setup screen, then set the scan directory of your user
@@ -73,13 +81,39 @@ during the start too.
 Only one LibrePhotos runs per data folder. Starting it again while it runs just opens the browser
 on the running one. Not released yet: a start while the first one is still starting shows the
 notification "LibrePhotos is already starting", waits for it and then opens the browser; nothing
-else happens. Up to 1.3.0 a second start during the first one's database update started a second
+else happens. Once the first one shows its start-up page, a second start opens the browser on that
+page at once. Up to 1.3.0 a second start during the first one's database update started a second
 copy, which could show an error and stop the first copy's background services.
 
 Started from a terminal instead, it prints its log there and Ctrl-C stops it; `--no-tray` leaves the
 icon out. Without a terminal that output goes to `console.log` in the logs folder; the log of the
 start before is kept as `console.previous.log` next to it (not released yet), so a failed start can
 still be explained after you tried again. For commands, see [Running a command](#running-a-command).
+
+### Checking your download {#checking-your-download}
+
+<Since version="1.4.0" /> Every release lists the SHA-256 checksums of its zips in a file called
+`SHA256SUMS`, under **Assets** next to the zip. If the checksum of your download is the same, the
+file arrived complete and is the one the release build made. It does not say who made the build:
+the program is not signed yet.
+
+1. Download `SHA256SUMS` from the same release as the zip, into the same folder (usually
+   **Downloads**).
+2. Open that folder in File Explorer, click the address bar, type `powershell` and press Enter.
+3. Paste these lines into the blue window and press Enter:
+
+   ```powershell
+   $zip = "librephotos-windows-x64.zip"
+   $line = Select-String -Path SHA256SUMS -SimpleMatch -Pattern "  $zip" | Select-Object -First 1
+   (Get-FileHash $zip -Algorithm SHA256).Hash -eq $line.Line.Split(" ")[0]
+   ```
+
+   For the zip with the version in its name, put that name in the first line instead.
+
+`True` means the download is fine. `False` means the file is incomplete or not the release's: delete
+it and download it again. You can also compare by eye: `Get-FileHash librephotos-windows-x64.zip`
+prints the **Hash**, and `SHA256SUMS` (open it with Notepad) has the same value in small letters
+in front of the file name.
 
 ### Choosing a folder {#choosing-a-folder}
 
@@ -259,8 +293,9 @@ and settings are all still there afterwards. The steps assume the program is in
    `C:\Users\<you>\LibrePhotos-app` again. You now have a new `librephotos` folder next to
    `librephotos-old`. Shortcuts to `librephotos\librephotos.exe` keep working.
 6. Double-click `librephotos.exe` in the new `librephotos` folder, once. If the release brings
-   database changes, the first start updates the database before the browser opens. That can take
-   a few minutes with a large library: wait, and do not start it again meanwhile.
+   database changes, the first start updates the database, and the browser shows "LibrePhotos is
+   updating" meanwhile ([what the page says](upgrading.md#updating-screen)). That can take a few
+   minutes with a large library: wait, and do not start it again meanwhile.
 7. Check that LibrePhotos works: log in and open a few photos and albums. Then delete the
    `librephotos-old` folder. Keep it for a while if you might want to [go back](#going-back).
 
@@ -390,3 +425,12 @@ This builds the frontend (Node 24 and Yarn on PATH; `--skip-frontend` reuses `ap
 collects the static files and compiles the backend; Nuitka needs Visual Studio's C++ build tools and
 downloads the rest itself. Expect the first build to take well over an hour, later ones are much
 faster thanks to Nuitka's cache. The result lands in `apps\backend\build\standalone\librephotos\`.
+With `--zip`, the zip and `SHA256SUMS` are next to that folder.
+
+To check a build the way the release workflow does, run the zip on a fresh data folder: the script
+starts it on free ports, creates an admin, checks every background service that needs no model,
+scans three sample photos, then ends `librephotos.exe` and fails if any of its processes is left.
+
+```powershell
+.\.venv\Scripts\python scripts\smoke_standalone.py build\standalone\librephotos-windows-x64.zip
+```

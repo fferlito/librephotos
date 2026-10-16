@@ -27,17 +27,50 @@ You can configure your preferred geocoding provider in **Admin Area → Site Set
 
 | Provider | API Key Required | Notes |
 |----------|-----------------|-------|
-| **Nominatim** (OpenStreetMap) | No | Free and open source, default option |
+| **ExifTool** (offline, built in) | No | Default for new installs. Works offline; names the nearest town, not streets (see [Offline place names](#offline-place-names-with-exiftool)) |
+| **Nominatim** (OpenStreetMap) | No | Free and open source; names streets; about one lookup per second |
 | **Mapbox** | Yes | Commercial service with free tier |
 | **MapTiler** | Yes | Commercial service with free tier |
 | **OpenCage** | Yes | Commercial service with free tier |
 | **TomTom** | Yes | Commercial service with free tier |
 
 :::tip Recommended Setup
-**Nominatim** is the recommended option as it's completely free and doesn't require an API key. It uses OpenStreetMap data and works well for most use cases.
+**ExifTool** is the recommended option: it is built in, needs no API key and no Internet access, and your photos' coordinates never leave your server. It names towns rather than streets. <Since version="1.4.0" /> New installs start with it; an install that has already looked up place names keeps the provider it had (Nominatim, unless you chose another), see [Switching the provider](#switching-the-provider).
 
-To respect Nominatim's public terms of use, LibrePhotos limits itself to about one lookup per second for this provider, and that limit is shared across all background workers — adding more workers won't speed it up. The first scan of a large geotagged library will therefore take a while, and places keep filling in after the scan reports done. If you have tens of thousands of geotagged photos, a commercial provider with an API key geocodes far faster.
+Choose **Nominatim** if you want street and point-of-interest names. It is free and needs no API key, but it receives the coordinates of your photos. To respect Nominatim's public terms of use, LibrePhotos limits itself to about one lookup per second for this provider, and that limit is shared across all background workers — adding more workers won't speed it up. The first scan of a large geotagged library will therefore take a while, and places keep filling in after the scan reports done. If you have tens of thousands of geotagged photos, a commercial provider with an API key geocodes far faster.
 :::
+
+#### Offline place names with ExifTool
+
+<Since version="1.4.0" />
+
+Choose **ExifTool (offline, built in)** as the **Map Provider** to look place names up on your own server. ExifTool, which LibrePhotos already uses to read metadata, comes with a database of the world's towns, so the lookup needs no Internet connection and no API key, has no rate limit (about 9 ms per photo instead of more than a second with Nominatim), and your photos' coordinates never leave the server.
+
+What to expect:
+
+- **Town level.** A photo gets its nearest town or neighbourhood (towns of 2,000 people or more), the district, the region and the country, for example *Zermatt, Visp District, Valais, Switzerland*. There are no street, park or point-of-interest names; choose Nominatim or a commercial provider if you want those. A name that repeats on several levels is kept once, so Lisbon is *Lisbon, Portugal*.
+- **Names in English or Latin script.** The names come from GeoNames and are the same for every user (*Germany*, *Tokyo*), not in the language of each country.
+- **Nothing within 50 km means no place.** A photo farther than 50 km from any town (open sea, a large national park, the Antarctic) keeps its position and stays on the map, but gets no place name and joins no Places album, rather than the name of a town far away.
+- **Borders.** The database knows towns, not borders: a photo taken close to a border can get the name of a town across it (on Kilimanjaro, the nearest town is in Kenya).
+- **Place search in the location picker** still uses Nominatim, because ExifTool cannot search addresses. Only the text you type is sent, never a photo's position. On a server without Internet access the search fails, but clicking the map and pasting coordinates still work.
+
+Place names from ExifTool come from [GeoNames](https://www.geonames.org/) and are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+#### Switching the provider
+
+Switching the **Map Provider** does not rename photos that already have a place: new photos, and photos whose position changes, get names from the new provider, so your Places albums mix the names of both.
+
+<Since version="1.4.0" /> To give every photo the names of the new provider, an admin opens **Admin Area → Admin Tools** and clicks **Start** next to **Look up place names again**, then confirms. A **Look Up Place Names** job asks the provider set now for the place of every photo with a location, for every user, and you can follow it in **Worker Logs**:
+
+- Each photo moves to the Places albums of its new names. Places albums under the old names end up empty, favourited or shared ones included.
+- The day albums (and the memories built from them) name their places again as the job reaches their photos.
+- Event titles keep their wording until the event albums are generated again (**Regenerate Event Titles**).
+- With ExifTool it takes minutes for a large library. With an online provider it takes about a second per photo (Nominatim's limit), so hours for tens of thousands of photos.
+- A photo whose lookup fails keeps its old place, and the next run tries it again.
+
+#### Which name a photo is filed under
+
+Every provider answers several names, from the street or town up to the country. The day albums, memories, event titles and the map button of an event ("Zermatt on map") use the town (Zermatt, not the canton Valais); the place tree uses the country, the region and the town; the location timeline uses the country. <Since version="1.4.0" /> These read the level each name has. Up to 1.3.0 they took the name at a fixed position in the list, which named the region for some providers, and the place tree left out places with fewer than three names (*Lisbon, Portugal*). Photos geocoded before 1.4.0 keep the names they showed until you look the place names up again.
 
 ### 3. Map Display
 

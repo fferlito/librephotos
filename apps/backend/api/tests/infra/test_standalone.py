@@ -6,6 +6,7 @@ Everything here runs from source: the compiled binary is recognised through
 relies on is covered without a Nuitka build.
 """
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -13,6 +14,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import zipfile
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -158,6 +160,55 @@ class StageRuntimeFilesTest(SimpleTestCase):
                 self.stage(Path(tmp), with_binaries=False)
 
         self.assertIn("is missing", str(stopped.exception))
+
+
+class ArchiveTest(SimpleTestCase):
+    """The release zip under a versioned name and the stable alias, with
+    SHA256SUMS for both (#2318, #2317)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.build = load_build_script()
+
+    def test_a_release_gets_a_versioned_name_and_the_stable_one(self):
+        self.assertEqual(
+            ["librephotos-1.4.0-windows-x64", "librephotos-windows-x64"],
+            self.build.archive_names("1.4.0", "windows-x64"),
+        )
+
+    def test_an_unversioned_build_only_gets_the_stable_name(self):
+        self.assertEqual(
+            ["librephotos-windows-x64"],
+            self.build.archive_names("0.0.0", "windows-x64"),
+        )
+
+    def test_the_zips_are_the_same_file_and_sha256sums_lists_both(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            dist = output / "librephotos"
+            dist.mkdir()
+            (dist / "librephotos.exe").write_bytes(b"MZ")
+            with (
+                patch.object(self.build, "platform_suffix", return_value="windows-x64"),
+                patch("builtins.print"),
+            ):
+                zips = self.build.archive(dist, output, "1.4.0")
+
+            self.assertEqual(
+                ["librephotos-1.4.0-windows-x64.zip", "librephotos-windows-x64.zip"],
+                [path.name for path in zips],
+            )
+            versioned, stable = (path.read_bytes() for path in zips)
+            self.assertEqual(versioned, stable)
+            digest = hashlib.sha256(versioned).hexdigest()
+            self.assertEqual(
+                f"{digest}  librephotos-1.4.0-windows-x64.zip\n"
+                f"{digest}  librephotos-windows-x64.zip\n",
+                (output / "SHA256SUMS").read_bytes().decode("utf-8"),
+            )
+            with zipfile.ZipFile(zips[1]) as bundle:
+                self.assertIn("librephotos/librephotos.exe", bundle.namelist())
 
 
 class StandaloneExecutableTest(SimpleTestCase):
@@ -576,6 +627,7 @@ class StartupStepTest(SimpleTestCase):
             patch.object(standalone, "_already_running", return_value=False),
             patch.object(standalone, "_take_children_down_with_us"),
             patch.object(standalone, "check_port"),
+            patch.object(standalone.Startup, "show_page"),
             patch.object(standalone.instance_lock, "acquire", return_value=MagicMock()),
             patch.object(standalone, "run_teed", side_effect=list(results)) as teed,
             patch("django.setup") as setup,
@@ -583,6 +635,7 @@ class StartupStepTest(SimpleTestCase):
         ):
             standalone.run_server("127.0.0.1", 8000, open_browser=False, tray=False)
         setup.assert_not_called()
+        self.reason_code = raised.exception.reason_code
         return str(raised.exception), [call.args[0] for call in teed.call_args_list]
 
     def test_no_backup_means_no_migration(self):
@@ -603,6 +656,7 @@ class StartupStepTest(SimpleTestCase):
         self.assertIn(
             "Free some disk space on drive C: and start LibrePhotos again.", message
         )
+        self.assertEqual(self.reason_code, "unknown")
 
     def test_a_refused_migration_names_the_check(self):
         message, commands = self.start(
@@ -614,6 +668,8 @@ class StartupStepTest(SimpleTestCase):
         self.assertIn("was last used by a newer LibrePhotos release", message)
         self.assertIn("Start the newer release again", message)
         self.assertNotIn("HINT", message)
+        # What the start-up page in the browser says about it (#2310).
+        self.assertEqual(self.reason_code, "E002")
 
     def test_a_failure_without_a_known_reason_still_says_what_failed(self):
         message, _ = self.start((0, []), (1, ["Segmentation fault"]))
@@ -643,17 +699,22 @@ class ServeTest(SimpleTestCase):
         )
         cluster = object()
         startup = standalone.Startup()
+        order = []
+        server.run = lambda: order.append("server")
         with (
             patch.object(standalone, "_set_console_title"),
-            patch.object(standalone, "_open_browser_when_up") as browser,
+            patch.object(
+                startup, "close_page", side_effect=lambda: order.append("page closed")
+            ),
             patch.object(standalone, "_shutdown") as shutdown,
             patch.object(startup, "status") as status,
         ):
             try:
-                standalone._serve(server, cluster, "http://x/", True, startup)
+                standalone._serve(server, cluster, "http://x/", startup)
             finally:
                 shutdown.assert_called_once_with(cluster)
-        browser.assert_called_once_with("http://x/")
+        # The start-up page holds the port until the server takes it (#2310).
+        self.assertEqual(order, ["page closed", "server"])
         return status
 
     def test_runs_until_the_server_stops_then_shuts_down(self):
