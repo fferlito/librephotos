@@ -31,8 +31,7 @@ import {
 } from "@/db/queries/app-meta";
 import { SYNC_ENTITIES, type SyncEntity } from "@/db/queries/sync-state";
 import { checkIntegrity, type IntegrityReport } from "@/sync/integrity";
-import { HASH_STATE_ICLOUD } from "@/sync/device/hasher";
-import { LOCAL_FIRST } from "@/sync/upload/queue";
+import { LOCAL_FIRST, UPLOADABLE } from "@/sync/upload/queue";
 import { pullEntityStep, type PullOptions } from "@/sync/remote/delta";
 import type { RemoteSyncSource } from "@/sync/remote/source";
 import { jobSizer, type JobSizer } from "./sizing";
@@ -146,7 +145,7 @@ export function enqueueUploadWindow(
         FROM upload_queue uq JOIN local_asset la ON la.id = uq.asset_id
         WHERE uq.state IN ('pending', 'failed')
           AND (uq.next_attempt_at IS NULL OR uq.next_attempt_at <= ${now})
-          AND (la.hash IS NOT NULL OR la.hash_state = ${HASH_STATE_ICLOUD})
+          AND ${UPLOADABLE}
           AND NOT EXISTS (
             SELECT 1 FROM job_queue j
             WHERE j.dedupe_key = 'upload_asset:' || uq.asset_id AND j.state IN ('pending', 'running')

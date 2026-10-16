@@ -73,6 +73,21 @@ describe("backupState", () => {
     expect(state.blocker).toBeNull();
   });
 
+  it("does not leave an unhashed video in 'Preparing photos'", () => {
+    // The hash pass skips videos (the worker hashes them on upload), so counting
+    // one as awaiting the hasher kept the screen on "Preparing" for good.
+    insertLocalAsset(t.db, { id: "photo", hash: "h1" });
+    insertLocalAsset(t.db, { id: "clip", hash: null, type: "video" });
+    insertLocalAlbum(t.db, { id: "cam", backupSelection: 1, assetIds: ["photo", "clip"] });
+    t.db.run(
+      sql`INSERT INTO upload_queue (asset_id, state, progress, attempts, enqueued_at)
+          VALUES ('clip', 'pending', 0, 0, 1)`
+    );
+    const state = stateOf(t);
+    expect(state.counts.awaitingHash).toBe(0);
+    expect(state.stage.kind).not.toBe("hashing");
+  });
+
   it("keeps the hash and upload stages separate", () => {
     seedSelected(t, 100, 40);
     t.db.run(

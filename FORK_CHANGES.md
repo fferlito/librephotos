@@ -71,15 +71,35 @@ from this list if so.
   because it already sends 1,000,000-byte chunks.
 - **Fix:** the app sends files in chunks of at most 1,000,000 bytes, like the web app. A file
   that fits is sent straight from disk as before; a larger one is cut into temporary chunk files
-  in the cache, deleted after each request. The split is a pure function with unit tests.
+  in the cache, deleted after each request. The photo is opened read-only: by default a `file://`
+  path opens read-write, which the app may not do to a camera photo. The split is a pure
+  function with unit tests.
 - **Files:**
   - `apps/mobile/src/sync/upload/chunks.ts` (new)
   - `apps/mobile/src/sync/upload/__tests__/chunks.test.ts` (new)
   - `apps/mobile/src/sync/upload/expo-transport.ts`
 
+### 5. Videos never back up, stuck on "Preparing photos"
+
+- **App:** mobile
+- **Symptom:** a selected video (for example a screen recording) never uploads, and the Backup
+  tab stays on "Preparing photos" for good.
+- **Cause:** the hash pass skips videos and leaves them to be hashed at upload time, but the
+  upload queue only took assets that were hashed or parked in iCloud, so a video never got in.
+  The Backup status also counted it as waiting for the hash pass.
+- **Fix:** the queue and the upload window also take unhashed videos (`UPLOADABLE` in
+  `queue.ts`); the worker hashes them on the way out, as it already did for iCloud assets.
+  Videos no longer count towards "Preparing photos".
+- **Files:**
+  - `apps/mobile/src/sync/upload/queue.ts`
+  - `apps/mobile/src/sync/jobs/handlers.ts`
+  - `apps/mobile/src/sync/upload/status.ts`
+  - `apps/mobile/src/sync/upload/__tests__/queue.test.ts`
+  - `apps/mobile/src/sync/upload/__tests__/status.test.ts`
+
 ## Custom changes
 
-### 5. App icon
+### 6. App icon
 
 - **App:** mobile
 - **Change:** new app icon from the icon pack in `apps/mobile/assets/AppIcons/`.
@@ -94,7 +114,7 @@ from this list if so.
   - `apps/mobile/assets/AppIcons/` (new)
   - `apps/mobile/app.json` (`icon`, `android.adaptiveIcon`)
 
-### 6. App name "DropjeBox"
+### 7. App name "DropjeBox"
 
 - **App:** mobile
 - **Change:** the name under the icon on the phone is "DropjeBox". Texts inside the app still

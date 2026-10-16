@@ -40,6 +40,17 @@ describe("upload queue enqueue rule", () => {
     expect(queuedIds(t)).toEqual(["yes"]);
   });
 
+  it("enqueues an unhashed video, which the worker hashes on the way out", () => {
+    // The hash pass skips videos, so without this a selected video never uploaded.
+    insertLocalAsset(t.db, { id: "clip", hash: null, type: "video" });
+    insertLocalAsset(t.db, { id: "photo", hash: null });
+    insertLocalAlbum(t.db, { id: "cam", backupSelection: 1, assetIds: ["clip", "photo"] });
+
+    expect(enqueueBackups(t.db, 1_000)).toBe(1);
+    expect(queuedIds(t)).toEqual(["clip"]);
+    expect(enqueueUploadWindow(t.db, 2_000).map((j) => j.payload?.assetId)).toEqual(["clip"]);
+  });
+
   it("does not double-enqueue an already-queued asset", () => {
     insertLocalAsset(t.db, { id: "a1", hash: "h1" });
     insertLocalAlbum(t.db, { id: "cam", backupSelection: 1, assetIds: ["a1"] });

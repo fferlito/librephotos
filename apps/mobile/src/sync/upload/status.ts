@@ -111,6 +111,7 @@ export function backupCounts(db: AppDatabase): BackupCounts {
     sql`SELECT COUNT(*) AS selected,
                SUM(CASE WHEN la.hash IS NOT NULL THEN 1 ELSE 0 END) AS hashed,
                SUM(CASE WHEN la.hash IS NULL AND la.hashed_at IS NULL AND la.hash_state IS NULL
+                         AND la.type <> 'video'
                         THEN 1 ELSE 0 END) AS awaiting_hash,
                SUM(CASE WHEN la.hash IS NULL AND la.hash_state = ${HASH_STATE_ICLOUD}
                         THEN 1 ELSE 0 END) AS awaiting_remote,

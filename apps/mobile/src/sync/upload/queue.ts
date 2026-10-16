@@ -12,6 +12,10 @@
  * would silently drop most of the library on any iPhone using "Optimise iPhone
  * Storage". Those are queued unhashed and sorted last; the worker downloads each
  * one once and hashes the bytes on their way out (see ./worker).
+ *
+ * Videos are queued unhashed too: the hash pass skips them (hashing GB-scale
+ * files eagerly wastes battery), so the worker hashes them on the way out the
+ * same way. Without this a selected video never left "Preparing photos".
  */
 import { sql } from "drizzle-orm";
 import type { AppDatabase } from "@/db/types";
@@ -30,6 +34,14 @@ export const MAX_ATTEMPTS = 5;
 /** Backoff base (ms): delay = base * 2^attempts. */
 export const BACKOFF_BASE_MS = 30_000;
 
+/**
+ * The assets the upload path can take: hashed, parked in iCloud, or a video the
+ * hash pass leaves to the worker (not yet attempted, so `hashed_at` is NULL).
+ * Expects the `local_asset` alias `la`. Shared with the upload window.
+ */
+export const UPLOADABLE = sql`(la.hash IS NOT NULL OR la.hash_state = ${HASH_STATE_ICLOUD}
+  OR (la.type = 'video' AND la.hashed_at IS NULL))`;
+
 export function backoffDelay(attempts: number, base = BACKOFF_BASE_MS): number {
   return base * 2 ** Math.max(0, attempts);
 }
@@ -44,7 +56,7 @@ export function enqueueBackups(db: AppDatabase, now = Date.now()): number {
     sql`INSERT INTO upload_queue (asset_id, state, progress, attempts, enqueued_at)
         SELECT la.id, 'pending', 0, 0, ${now}
         FROM local_asset la
-        WHERE (la.hash IS NOT NULL OR la.hash_state = ${HASH_STATE_ICLOUD})
+        WHERE ${UPLOADABLE}
           AND EXISTS (SELECT 1 FROM local_album_asset laa JOIN local_album l ON l.id = laa.album_id
                       WHERE laa.asset_id = la.id AND l.backup_selection = 1)
           AND NOT EXISTS (SELECT 1 FROM local_album_asset laa JOIN local_album l ON l.id = laa.album_id
